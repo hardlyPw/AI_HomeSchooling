@@ -1,0 +1,11 @@
+# Python / Backend
+Backend/venv/
+Backend/__pycache__/
+*.pyc
+
+# React / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# 기타 환경변수 (나중에 API 키 숨길 때 필요)
+.env

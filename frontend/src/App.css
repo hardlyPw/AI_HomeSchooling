@@ -1,0 +1,112 @@
+/* =========================================
+   1. Vite 기본 설정 강제 초기화 (이 부분이 핵심입니다!) 
+   ========================================= */
+#root {
+  max-width: 100%; /* Vite의 기본 가로폭 제한 해제 */
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  text-align: left; /* 텍스트 가운데 정렬 해제 */
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* 브라우저 전체 스크롤바 숨김 */
+}
+
+/* =========================================
+   2. 50:50 동적 분할 레이아웃
+   ========================================= */
+.main-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* 왼쪽: 선생님 영역 (정확히 절반) */
+.teacher-section {
+  flex: 1; /* 화면의 1/2 (동적 할당) */
+  background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid #ddd;
+}
+
+/* 오른쪽: 채팅 영역 (정확히 절반) */
+.chat-section {
+  flex: 1; /* 화면의 1/2 (동적 할당) */
+  display: flex;
+  flex-direction: column;
+  background-color: #BACEE0; 
+}
+
+.chat-header {
+  padding: 15px;
+  background: #ffffff;
+  font-weight: bold;
+  font-size: 1.1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.chat-window {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 말풍선 스타일 (카카오톡 스타일) */
+.bubble {
+  max-width: 70%;
+  padding: 10px 15px;
+  border-radius: 15px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  position: relative;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background-color: #FEE500; /* 카카오 노란색 */
+  color: #000;
+  border-top-right-radius: 2px;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  background-color: #ffffff;
+  color: #000;
+  border-top-left-radius: 2px;
+}
+
+/* 하단 입력창 영역 */
+.input-area {
+  padding: 15px;
+  background: #ffffff;
+  display: flex;
+  gap: 10px;
+}
+
+.input-area input {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  outline: none;
+}
+
+.input-area button {
+  padding: 0 20px;
+  background-color: #FEE500;
+  border: none;
+  border-radius: 5px;
+  font-weight: bold;
+  cursor: pointer;
+}
