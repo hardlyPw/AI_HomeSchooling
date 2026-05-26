@@ -1,10 +1,19 @@
 from pydantic import BaseModel
 
-# 클라이언트로부터 받을 데이터 형식
 class ChatRequest(BaseModel):
     message: str
+    pdf_context: str | None = None
+    figure_context: str | None = None
+    figure_image: str | None = None
+    current_video_time: float | None = None
 
-# 클라이언트로 보낼 데이터 형식
 class ChatResponse(BaseModel):
     reply: str
+    summary: str
     status: str = "success"
+
+class SummarizeRequest(BaseModel):
+    text: str
+
+class SummarizeResponse(BaseModel):
+    summary: str
