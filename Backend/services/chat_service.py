@@ -1,8 +1,45 @@
+from AI_Teacher import get_teacher_response
+
+HISTORY_LIMIT = 50  # 최대 50개 메시지 유지 (25회 대화)
+
 class ChatService:
     def __init__(self):
-        # 나중에 여기에 DB 세션이나 API 키 설정을 넣습니다.
-        pass
+        self.conversation_history: list[dict] = []
 
-    async def get_mock_response(self, user_message: str) -> str:
-        # 현재는 실험 중이므로 고정된 Mock 데이터 반환
-        return f"실험 중인 모델의 가짜 응답입니다: '{user_message}'에 대해 분석 중입니다."
+    def get_reply(
+        self,
+        user_message: str,
+        pdf_context: str | None = None,
+        figure_context: str | None = None,
+        figure_image: str | None = None,
+        current_video_time: float | None = None,
+    ) -> tuple[str, str]:
+        parts: list[str] = []
+        if pdf_context:
+            parts.append(
+                f'I highlighted this passage from the textbook:\n"""\n{pdf_context}\n"""'
+            )
+        if figure_context:
+            parts.append(f'I clicked on a figure in the textbook. {figure_context}')
+        if figure_image:
+            parts.append('The clicked figure is attached as an image.')
+
+        if parts:
+            user_content = "\n\n".join(parts) + f"\n\nMy question: {user_message}"
+        else:
+            user_content = user_message
+
+        reply, summary = get_teacher_response(
+            user_content,
+            self.conversation_history,
+            current_video_time,
+            figure_image,
+        )
+
+        self.conversation_history.append({"role": "user", "text": user_content})
+        self.conversation_history.append({"role": "assistant", "text": reply})
+
+        if len(self.conversation_history) > HISTORY_LIMIT:
+            self.conversation_history = self.conversation_history[-HISTORY_LIMIT:]
+
+        return reply, summary
