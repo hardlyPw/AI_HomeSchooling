@@ -516,10 +516,9 @@ def _get_time_context() -> tuple[str, str]:
 
 def make_decision(
     user_input: str,
-    agent_emotion_info: dict,
     long_term_memories: list[dict],
 ) -> dict:
-    """1st API call: Jiho의 행동 방식 결정 (타이밍, 액션, 톤)."""
+    """1st API call: Jiho의 감정 + 행동 방식을 한 번에 추출 (timing, action, emotion)."""
     global _cooldown_until, _cooldown_reason
 
     time_str, time_ctx = _get_time_context()
@@ -539,7 +538,7 @@ def make_decision(
         f"- {m['description']}" for m in long_term_memories
     ) if long_term_memories else "none"
 
-    system_prompt = f"""You are Jiho's behavioral decision layer. Decide HOW Jiho responds — not WHAT he says.
+    system_prompt = f"""You are Jiho's behavioral decision layer. First read your friend's recent messages and your own honest emotional reaction. Then decide HOW Jiho responds — not WHAT he says.
 
 [Jiho's Texting Personality]
 - Direct, doesn't chat just to chat.
@@ -552,7 +551,6 @@ def make_decision(
 [Context]
 - Time: {time_str} ({time_ctx})
 - Affinity: {affinity}/100
-- Emotion: {agent_emotion_info.get('emotion', 'neutral')} — {agent_emotion_info.get('reason', '')}
 - Just came back: {came_back_from or 'no (actively chatting)'}
 - Conversation length so far: {len(conversation_history)} messages
 
@@ -565,7 +563,10 @@ def make_decision(
 [Jiho's Memories]
 {mem_ctx}
 
-[Decision Guide]
+[Step 1 — Emotion]
+React honestly as Jiho to your friend's recent messages. Use a short English word or short phrase (e.g. "annoyed", "concerned", "amused", "bored", "neutral"). State briefly why you feel that way.
+
+[Step 2 — Decision]
 Default to {{"timing": "instant", "action": "normal"}}. Only deviate when the context clearly calls for it.
 - "wrap_up": RARE (~1 in 15-20 exchanges). Jiho leaves for a real reason.
 - "double_text": only when genuinely excited or correcting/adding to his own message.
@@ -574,7 +575,7 @@ Default to {{"timing": "instant", "action": "normal"}}. Only deviate when the co
 - "memory_flashback": only when a memory directly connects to what the user said.
 
 Output JSON only:
-{{"timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "reasoning": "one sentence"}}"""
+{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "reasoning": "one sentence"}}"""
 
     try:
         start = time.time()
@@ -973,28 +974,21 @@ if __name__ == "__main__":
 
         start_total = time.time()
 
-        # 최근 유저 발화 최대 10개 + 현재 입력
-        recent_user_msgs = [m["text"] for m in conversation_history if m["role"] == "user"][-10:]
-        recent_user_msgs.append(user_input)
-
         # 호감도에 따라 장기기억 개수 조정
         top_k = 1 if affinity <= 40 else 3
 
         if USE_LONG_TERM_MEMORY:
-            # 장기기억 검색 + Agent 감정 분석 병렬 실행
-            with ThreadPoolExecutor() as executor:
-                future_memory     = executor.submit(get_long_term_memory, user_input, top_k)
-                future_agent_emo  = executor.submit(get_agent_emotion, recent_user_msgs)
-                long_term         = future_memory.result()
-                agent_emotion_info = future_agent_emo.result()
+            long_term = get_long_term_memory(user_input, top_k)
         else:
-            # 페르소나 단독 평가 모드: RAG 스킵, Agent 감정만 호출
             long_term = []
-            agent_emotion_info = get_agent_emotion(recent_user_msgs)
-        print(f"[Agent 감정] {agent_emotion_info['emotion']} — {agent_emotion_info['reason']}")
 
-        # ── 1st call: 행동 결정 ──────────────────────────────────
-        decision = make_decision(user_input, agent_emotion_info, long_term)
+        # ── 1st call: 감정 + 행동 결정 (한 번에) ─────────────────
+        decision = make_decision(user_input, long_term)
+        agent_emotion_info = {
+            "emotion": decision.get("emotion", "neutral"),
+            "reason":  decision.get("emotion_reason", ""),
+        }
+        print(f"[Agent 감정] {agent_emotion_info['emotion']} — {agent_emotion_info['reason']}")
 
         # ── 2nd call: 답변 생성 ──────────────────────────────────
         prompt = build_prompt(
