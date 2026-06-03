@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import threading
 import atexit
@@ -14,6 +15,13 @@ from typing import Any, cast
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
 import time
+
+# Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 load_dotenv()
 
@@ -924,6 +932,34 @@ def _split_double_text(text: str) -> list[str]:
 
     return [text]
 
+# ── Raw Conversation Log (general AI 비교용) ────────────────────────
+CONVERSATION_LOG_DIR = "conversations"
+_conversation_log_path: str | None = None
+
+
+def _init_conversation_log() -> None:
+    """세션 시작 시 timestamp 기반 로그 파일 생성 + 헤더 기록."""
+    global _conversation_log_path
+    os.makedirs(CONVERSATION_LOG_DIR, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _conversation_log_path = os.path.join(CONVERSATION_LOG_DIR, f"jiho_chat_{stamp}.txt")
+    with open(_conversation_log_path, "w", encoding="utf-8") as f:
+        f.write("=== Jiho Conversation Log ===\n")
+        f.write(f"Session start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Initial affinity: {affinity}\n\n")
+    print(f"[Log] 대화 기록: {_conversation_log_path}")
+
+
+def _log_turn(role: str, text: str) -> None:
+    """한 turn을 raw text 로그에 append. role: 'user' or 'ai'."""
+    if _conversation_log_path is None:
+        return
+    label = "User" if role == "user" else "Jiho"
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    with open(_conversation_log_path, "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {label}: {text}\n")
+
+
 # ── JSONL Export for Autorater ──────────────────────────────────────
 EXPORT_FILE = "autorater_target.jsonl"
 
@@ -962,6 +998,7 @@ if __name__ == "__main__":
     # INITIAL_HISTORY를 단기기억에 시드로 로드 (자연스러운 follow-up용)
     conversation_history.extend(INITIAL_HISTORY)
     print(f"[Seed] 단기기억 {len(INITIAL_HISTORY)}개 로드됨")
+    _init_conversation_log()
     print("대화를 시작합니다. 종료하려면 'exit' 입력\n")
     while True:
         user_input = input("유저: ").strip()
@@ -1007,10 +1044,12 @@ if __name__ == "__main__":
 
         ai_reply_joined = " ".join(ai_replies)
 
-        # 히스토리 저장
+        # 히스토리 저장 + raw 로그
         add_to_history("user", user_input, None)
+        _log_turn("user", user_input)
         for msg in ai_replies:
             add_to_history("ai", msg, None)
+            _log_turn("ai", msg)
 
         # 호감도 업데이트
         with ThreadPoolExecutor() as executor:
