@@ -12,6 +12,9 @@ frontend/dist/
 .env
 .env.*
 
+# Agent runtime artifacts
+Agent/conversations/
+
 # IDE / OS
 .vscode/
 .idea/
