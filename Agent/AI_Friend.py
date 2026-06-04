@@ -46,8 +46,7 @@ MEMORY_MATCH_RPC = "match_friend_memories"
 
 # ── 새 RAG 트리거 정책 ──────────────────────────────────────────────
 CHAT_TURN_THRESHOLD = 5           # 5턴 누적 → chat consolidation
-SESSION_TIMEOUT_SECONDS = 5 * 60  # 5분 무대화 → 세션 종료 (잔여 chunk flush + thought)
-META_THOUGHT_THOUGHT_COUNT = 10   # 새 thought 10개 쌓이면 메타-thought
+SESSION_TIMEOUT_SECONDS = 5 * 60  # 5분 무대화 → 세션 종료 (잔여 chunk flush)
 
 ROLE_DISPLAY = {"user": "User", "ai": "Jiho"}
 DEBUG_PROMPT = True  # True 로 설정하면 프롬프트 조립 과정을 출력
@@ -55,7 +54,7 @@ DEBUG_PROMPT = True  # True 로 설정하면 프롬프트 조립 과정을 출�
 # ── 평가 모드 플래그 ───────────────────────────────────────────────────
 # False = 페르소나 단독 평가 (장기기억 검색·저장 모두 OFF)
 # True  = 풀 시스템 (RAG 활성화)
-USE_LONG_TERM_MEMORY = False
+USE_LONG_TERM_MEMORY = True
 
 affinity: int = 70             # 호감도 (0~100)
 consecutive_negative: int = 0  # 연속 마이너스 횟수
@@ -64,8 +63,6 @@ consecutive_negative: int = 0  # 연속 마이너스 횟수
 _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="memory")
 _pending_chunk_lock = threading.Lock()
 _pending_chunk: list[dict] = []  # [{user, ai, importance, ts}, ...]
-_thought_counter_lock = threading.Lock()
-_thoughts_since_meta: int = 0
 _session_timer_lock = threading.Lock()
 _session_timer: threading.Timer | None = None
 
@@ -185,7 +182,7 @@ Age: Same-age peer (13–14, 7th grader)
 Note: Close friend of Jiho — from the same school or neighborhood."""
 
 # ── 장기기억: 벡터 검색 + 점수 산출 ────────────────────────────────
-def get_long_term_memory(query_text: str, top_k: int = 3) -> list[dict]:
+def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
     start_embed = time.time()
     query_vector = model.encode(query_text).tolist()
     print(f"[Latency] 🔍 임베딩 변환: {time.time() - start_embed:.4f}초")
@@ -206,7 +203,7 @@ def get_long_term_memory(query_text: str, top_k: int = 3) -> list[dict]:
     temp_list = []
     for item in candidates:
         rel_raw = float(item.get("similarity", 0.0))
-        imp_raw = float(item.get("poignancy", 5.0))
+        imp_raw = float(item.get("poignancy", 3.0))
         created_at_str = item.get("created_at")
         if isinstance(created_at_str, str):
             created_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
@@ -275,12 +272,20 @@ def _trigger_session_end() -> None:
     """5분 timer 또는 atexit에서 호출됨. atexit 시점엔 ThreadPoolExecutor가 이미
     shutdown 상태일 수 있어서 submit 못 함 → 동기 직접 호출. 5분 timer 경우는
     별도 daemon thread에서 호출되니 동기 block돼도 main 영향 없음."""
-    print("[Memory] 세션 종료 감지 (chat + thought 마무리)")
+    print("[Memory] 세션 종료 감지 (chat 마무리)")
     chunk = _drain_pending_chunk()
     if not chunk:
         return
     _create_chat_memory(chunk)
-    _create_thought_memory(chunk)
+
+
+def _trigger_session_end_async(reason: str) -> None:
+    """메인 루프에서 호출되는 비동기 버전. session_break 신호 등."""
+    chunk = _drain_pending_chunk()
+    if not chunk:
+        return
+    print(f"[Memory] 세션 종료 ({reason}) → chat async 추출")
+    _executor.submit(_create_chat_memory, chunk)
 
 
 # ── chat description 생성 (대화 chunk 요약 — content layer) ──────────
@@ -300,169 +305,66 @@ def _create_chat_memory(chunk: list[dict]) -> None:
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": (
-                    "You summarize a short chat chunk into one compact memory entry. "
+                    "You extract distinct factual memories from a short chat chunk. "
                     "Output only valid JSON."
                 )},
                 {"role": "user", "content": (
                     f"[Chat Log]\n{convo_text}\n\n"
-                    "Summarize this chunk in 1-2 short sentences. Be specific: include "
-                    "the main topic, one concrete fact if present, and the user's tone. "
-                    "Skip filler.\n\n"
+                    "[Task]\n"
+                    "Extract up to 5 DISTINCT memory entries from this chunk — one per "
+                    "specific fact, event, or topic discussed. Fewer is fine. Return an "
+                    "empty list if the chunk is pure filler.\n\n"
+                    "Each entry must:\n"
+                    "- Be 1 short sentence, specific (name the actual topic/fact, "
+                    "not vague phrasings like \"they talked about school\").\n"
+                    "- Be third-person factual notes about the user.\n"
+                    "- NOT overlap with other entries in the same list (no paraphrasing).\n"
+                    "- NOT include meta-commentary, persona names, or 'the AI said'.\n\n"
                     "Examples of the target style:\n"
-                    "- \"User vented about bombing the math retake; tone was flat, mom topic "
-                    "came up again.\"\n"
+                    "- \"User vented about bombing the math retake; tone was flat.\"\n"
+                    "- \"User mentioned mom topic again — recurring theme.\"\n"
                     "- \"User and Jiho planned a Valorant session for Friday after band practice.\"\n\n"
-                    "Avoid vague phrasings like \"they talked about school\" — name the specific thing. "
-                    "Do NOT include meta-commentary, persona names, or 'the AI said'. "
-                    "Write as third-person factual notes about the user.\n\n"
-                    "Also rate this chunk's importance 1-10:\n"
-                    "- 1: small talk, nothing referenceable later\n"
-                    "- 5: ordinary, contains at least one concrete fact\n"
-                    "- 10: emotionally intense OR a major decision/event for the user\n\n"
-                    'Output JSON: {"description": "...", "poignancy": <1-10>}'
+                    "Rate each entry's importance 1-5:\n"
+                    "- 1: small talk, nothing referenceable later (omit instead)\n"
+                    "- 2: minor detail, low future relevance\n"
+                    "- 3: ordinary, contains a concrete fact\n"
+                    "- 4: notable — recurring theme OR clear emotional weight\n"
+                    "- 5: emotionally intense OR a major decision/event for the user\n\n"
+                    'Output JSON: {"entries": [{"description": "...", "poignancy": <1-5>}, ...]}'
                 )},
             ],
-            max_tokens=200,
+            max_tokens=600,
             temperature=0,
             response_format={"type": "json_object"},
         )
         raw = (response.choices[0].message.content or "").strip()
         parsed = json.loads(raw)
-        description = str(parsed.get("description", "")).strip()
-        poignancy = max(1, min(10, int(parsed.get("poignancy", 5))))
+        entries = parsed.get("entries", [])
+        if not isinstance(entries, list):
+            print("[Memory] chat 추출 결과 형식 오류")
+            return
     except Exception as e:
         print(f"[Memory] chat description 생성 실패: {e!s:.200s}")
         return
 
-    if not description:
-        return
+    saved = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        description = str(entry.get("description", "")).strip()
+        if not description:
+            continue
+        try:
+            poignancy = max(1, min(5, int(entry.get("poignancy", 3))))
+        except (TypeError, ValueError):
+            poignancy = 3
+        _save_memory("chat", description, poignancy, filling=flat_filling)
+        saved += 1
 
-    _save_memory("chat", description, poignancy, filling=flat_filling)
-
-
-# ── thought description 생성 (durable 학생 인사이트 — model layer) ───
-def _create_thought_memory(chunk: list[dict]) -> None:
-    convo_text = "\n".join(
-        f"User: {c['user']}\nJiho: {c['ai']}"
-        for c in chunk
-    )
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": (
-                    "You extract one durable trait about the user from a peer-to-peer "
-                    "conversation. Output only valid JSON."
-                )},
-                {"role": "user", "content": (
-                    f"[Conversation]\n{convo_text}\n\n"
-                    "[Task]\n"
-                    "Extract ONE durable trait about the user from this session, if any.\n"
-                    "Look for: persistent emotional patterns, recurring interests, social "
-                    "preferences, relationship dynamics, recurring complaints or strengths.\n\n"
-                    "Hard rules:\n"
-                    "- Return \"None\" if the session shows no durable trait — most sessions will.\n"
-                    "- Do NOT restate what happened (that goes in chat memory).\n"
-                    "- Do NOT generalize from a single weak signal. Require repetition or strong evidence.\n"
-                    "- Phrase as a stable property: \"User tends to...\" / \"User struggles with...\" "
-                    "/ \"User responds well to...\" — NOT \"User said X today.\"\n\n"
-                    "Poignancy 1-10:\n"
-                    "- 1: weak/uncertain signal → use \"None\" instead\n"
-                    "- 5: moderate confidence about a recurring behavior\n"
-                    "- 10: high confidence about a major personality trait or relationship pattern\n\n"
-                    'Output JSON: {"description": "...", "poignancy": <1-10>}'
-                )},
-            ],
-            max_tokens=200,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        raw = (response.choices[0].message.content or "").strip()
-        parsed = json.loads(raw)
-        description = str(parsed.get("description", "")).strip()
-        poignancy = max(1, min(10, int(parsed.get("poignancy", 1))))
-    except Exception as e:
-        print(f"[Memory] thought 추출 실패: {e!s:.200s}")
-        return
-
-    if not description or description.lower() == "none":
-        print("[Memory] 이번 세션에서는 추출할 thought 없음")
-        return
-
-    _save_memory("thought", description, poignancy)
-    _bump_thought_counter()
-
-
-def _bump_thought_counter() -> None:
-    global _thoughts_since_meta
-    with _thought_counter_lock:
-        _thoughts_since_meta += 1
-        count = _thoughts_since_meta
-    if count >= META_THOUGHT_THOUGHT_COUNT:
-        with _thought_counter_lock:
-            _thoughts_since_meta = 0
-        _executor.submit(_create_meta_thought)
-
-
-# ── 메타 thought (최근 thought 10개 묶음 → 상위 패턴) ────────────────
-def _create_meta_thought() -> None:
-    try:
-        response = (
-            supabase.table(MEMORY_TABLE)
-            .select("description, created_at")
-            .eq("type", "thought")
-            .order("created_at", desc=True)
-            .limit(META_THOUGHT_THOUGHT_COUNT)
-            .execute()
-        )
-        recent: list[dict] = list(response.data) if response.data else []
-    except Exception as e:
-        print(f"[Memory] 메타 thought 조회 실패: {e!s:.200s}")
-        return
-
-    if len(recent) < META_THOUGHT_THOUGHT_COUNT:
-        return
-
-    thoughts_list = "\n".join(f"- {t['description']}" for t in recent)
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": (
-                    "You find higher-order patterns across multiple observations about a user. "
-                    "Output only valid JSON."
-                )},
-                {"role": "user", "content": (
-                    f"[Recent observations about the user]\n{thoughts_list}\n\n"
-                    "[Task]\n"
-                    "Find a higher-order pattern across these observations, if one exists.\n"
-                    "- Look for themes that span multiple sessions.\n"
-                    "- Return \"None\" if the observations don't converge — partial overlap isn't a pattern.\n"
-                    "- Do NOT just concatenate. The output should say something none of the input "
-                    "notes said on their own.\n\n"
-                    'Output JSON: {"description": "...", "poignancy": <1-10>}\n'
-                    'Start the description with "[Pattern] ".'
-                )},
-            ],
-            max_tokens=200,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        raw = (response.choices[0].message.content or "").strip()
-        parsed = json.loads(raw)
-        description = str(parsed.get("description", "")).strip()
-        poignancy = max(1, min(10, int(parsed.get("poignancy", 5))))
-    except Exception as e:
-        print(f"[Memory] 메타 thought 생성 실패: {e!s:.200s}")
-        return
-
-    if not description or description.lower() == "none":
-        return
-
-    if not description.startswith("[Pattern]"):
-        description = f"[Pattern] {description}"
-
-    _save_memory("thought", description, poignancy)
+    if saved == 0:
+        print("[Memory] chat 추출 결과 없음 (filler chunk)")
+    else:
+        print(f"[Memory] chat description {saved}개 저장")
 
 
 # ── 세션 timer (매 발화마다 reset, 5분 후 _trigger_session_end) ─────
@@ -477,7 +379,8 @@ def _reset_session_timer() -> None:
 
 
 # ── public API (매 chat turn 후 호출) ────────────────────────────────
-def record_turn(user_text: str, ai_text: str) -> None:
+def record_turn(user_text: str, ai_text: str, session_break: bool = False) -> None:
+    global _session_timer
     if not USE_LONG_TERM_MEMORY:
         return
     with _pending_chunk_lock:
@@ -488,13 +391,21 @@ def record_turn(user_text: str, ai_text: str) -> None:
         })
         n = len(_pending_chunk)
     print(f"[Memory] turn 누적: {n}/{CHAT_TURN_THRESHOLD}")
+    if session_break:
+        # decision layer가 자연스러운 세션 종료 감지 → 즉시 flush, 5분 timer 취소
+        with _session_timer_lock:
+            if _session_timer is not None:
+                _session_timer.cancel()
+                _session_timer = None
+        _trigger_session_end_async("session_break")
+        return
     if n >= CHAT_TURN_THRESHOLD:
         _trigger_chat_consolidation(f"{CHAT_TURN_THRESHOLD}-turn threshold")
     _reset_session_timer()
 
 
 def memory_shutdown() -> None:
-    """프로세스 종료 시 pending 세션을 chat/thought 으로 마무리."""
+    """프로세스 종료 시 pending 세션을 chat 으로 마무리."""
     if not USE_LONG_TERM_MEMORY:
         return
     with _session_timer_lock:
@@ -583,8 +494,15 @@ Default to {{"timing": "instant", "action": "normal"}}. Only deviate when the co
 - "topic_drift": when the current topic is boring or Jiho has something on his mind.
 - "memory_flashback": only when a memory directly connects to what the user said.
 
+[Step 3 — Session Break (hidden system signal)]
+Set "session_break": true if the conversation has reached a natural endpoint:
+- User explicitly leaves ("gtg", "cya", "ttyl", "bbl", "bed time", "im out", "later", etc.)
+- You chose timing=="wrap_up" (you're the one leaving)
+- The exchange has clearly resolved with no follow-up expected
+Otherwise false. This is a system signal only — it does NOT change your reply.
+
 Output JSON only:
-{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "reasoning": "one sentence"}}"""
+{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "session_break": true|false, "reasoning": "one sentence"}}"""
 
     try:
         start = time.time()
@@ -599,15 +517,20 @@ Output JSON only:
         decision = json.loads(raw)
         print(f"[Decision] {time.time() - start:.2f}s → "
               f"timing={decision.get('timing')}, action={decision.get('action')}, "
+              f"break={decision.get('session_break')}, "
               f"reason={decision.get('reasoning', '')}")
     except Exception as e:
         print(f"[Decision] 실패, 기본값: {e}")
-        decision = {"timing": "instant", "action": "normal", "reasoning": "fallback"}
+        decision = {"timing": "instant", "action": "normal", "session_break": False, "reasoning": "fallback"}
 
     if decision.get("timing") not in ("instant", "delayed", "double_text", "wrap_up"):
         decision["timing"] = "instant"
     if decision.get("action") not in ("normal", "topic_drift", "memory_flashback"):
         decision["action"] = "normal"
+    decision["session_break"] = bool(decision.get("session_break", False))
+    # wrap_up은 Jiho가 떠나는 거니까 자동으로 세션 종료로 간주
+    if decision["timing"] == "wrap_up":
+        decision["session_break"] = True
 
     if came_back_from:
         decision["came_back_from"] = came_back_from
@@ -710,7 +633,7 @@ def build_prompt(
     user_input: str,
     agent_emotion_info: dict | None = None,
     long_term_memories: list[dict] | None = None,
-    long_term_k: int = 3,
+    long_term_k: int = 5,
     decision: dict | None = None,
 ) -> str:
     # 외부에서 미리 조회된 장기기억이 없으면 직접 조회 (하위 호환)
@@ -1013,7 +936,7 @@ if __name__ == "__main__":
         start_total = time.time()
 
         # 호감도에 따라 장기기억 개수 조정
-        top_k = 1 if affinity <= 40 else 3
+        top_k = 1 if affinity <= 40 else 5
 
         if USE_LONG_TERM_MEMORY:
             long_term = get_long_term_memory(user_input, top_k)
@@ -1059,7 +982,7 @@ if __name__ == "__main__":
             delta, affinity_reason = future_affinity.result()
 
         # 장기기억 트리거
-        record_turn(user_input, ai_reply_joined)
+        record_turn(user_input, ai_reply_joined, session_break=decision.get("session_break", False))
 
         # 연속 마이너스 3회부터 ×2 적용
         if delta < 0:
@@ -1104,6 +1027,7 @@ if __name__ == "__main__":
         timing_tag = decision.get("timing", "instant")
         action_tag = decision.get("action", "normal")
         print(f"[호감도] {old_affinity} → {affinity} ({delta:+d}{multiplier_note}) | {affinity_reason}")
-        print(f"[행동] timing={timing_tag}, action={action_tag}")
+        break_tag = decision.get("session_break", False)
+        print(f"[행동] timing={timing_tag}, action={action_tag}, session_break={break_tag}")
         print(f"[Export] → {EXPORT_FILE}")
         print(f"[총 레이턴시: {time.time() - start_total:.4f}초]\n")
