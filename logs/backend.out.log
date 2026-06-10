@@ -1,0 +1,11 @@
+INFO:     127.0.0.1:52761 - "POST /api/v1/isabella/start HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52367 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:53391 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:62254 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:53581 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:51460 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52305 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:52305 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:64033 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:58989 - "OPTIONS /api/v1/autorater/start HTTP/1.1" 400 Bad Request
+INFO:     127.0.0.1:59015 - "GET / HTTP/1.1" 200 OK
