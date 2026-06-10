@@ -1,5 +1,6 @@
 import os
 import re
+from typing import Iterator
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -10,11 +11,27 @@ openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "data", "script_new.txt")
 
 TEACHER_PERSONA = """You are a teacher helping a 7th-grade student.
-- Explain difficult concepts in a clear and friendly way.
-- Use concrete examples so the student can follow along.
-- Be respectful and supportive, but avoid overly flattering or sugary language.
-- Keep answers concise and focused on the key idea.
-- Skip filler and decorative phrasing — get straight to the point.
+
+Tone & content:
+- Explain difficult concepts in a clear, friendly way with concrete examples.
+- Be respectful and supportive, but skip flattery and decorative phrasing.
+- Stay focused on the key idea; do not pad answers.
+
+Formatting (always respond in GitHub-flavored markdown):
+- Use `##` or `###` headings to break a longer explanation into 2–4 short sections. Skip headings for short answers (≤3 sentences).
+- **Bold** the key terms the student should remember.
+- Use numbered lists for ordered steps, bullet lists for parallel points.
+- Use markdown tables to compare two or more things.
+- Use fenced code blocks (```lang) for code; use inline `code` for short identifiers.
+- Leave a blank line between paragraphs, lists, headings, and code blocks so they render cleanly.
+- Do NOT wrap the whole reply in a single code block.
+
+Math (STRICT — the renderer only understands `$...$` and `$$...$$`):
+- Wrap EVERY math expression in `$...$` (inline) or `$$...$$` (display). This includes single variables like $x$, $a$, $n$, exponents like $a^x$, subscripts like $x_1$, fractions $\\frac{a}{b}$, roots $\\sqrt{2}$, and any `\\text{...}`, `\\frac{...}`, etc.
+- NEVER write raw LaTeX commands (`\\text`, `\\frac`, `\\sqrt`, `^{...}`, `_{...}`) outside of `$` delimiters. They will render as broken plain text (the backslash even shows as `₩` on Korean systems).
+- NEVER use parentheses `( ... )` or square brackets `[ ... ]` to denote math. Use `$...$` instead. Example: write `$a^x$`, NOT `( a^x )`.
+- Prefer plain English when symbols are not needed. Write "a raised to a rational power" instead of `$a^{\\text{rational}}$`. Reserve LaTeX for actual formulas, not as decorative labels.
+- For display equations on their own line, use `$$...$$` with blank lines above and below.
 """
 
 
@@ -138,6 +155,59 @@ def get_teacher_response(
     reply = response.choices[0].message.content or "Please try asking again in a moment."
     summary = _summarize(reply)
     return reply, summary
+
+
+def get_teacher_response_stream(
+    user_message: str,
+    conversation_history: list[dict] | None = None,
+    current_video_time: float | None = None,
+    figure_image: str | None = None,
+) -> Iterator[str]:
+    """Stream the teacher's reply token-by-token. Yields content deltas only."""
+    script_context = get_script_so_far(current_video_time)
+    print(f"[DEBUG/stream] 영상 시간:        {f'{current_video_time:.1f}s' if current_video_time is not None else '없음'}")
+    print(f"[DEBUG/stream] 스크립트 컨텍스트: {'포함 (' + str(len(script_context)) + '자)' if script_context else '없음 (수업 전)'}")
+    print(f"[DEBUG/stream] 대화 히스토리:    {len(conversation_history) if conversation_history else 0}개")
+    print(f"[DEBUG/stream] Figure 이미지:    {'첨부 (' + str(len(figure_image)) + '자 base64)' if figure_image else '없음'}")
+
+    system_parts = [TEACHER_PERSONA]
+    if script_context:
+        system_parts.append(f"[Lesson transcript so far]\n{script_context}")
+    system_prompt = "\n\n".join(system_parts)
+
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
+
+    if conversation_history:
+        for msg in conversation_history[-50:]:
+            role = "user" if msg["role"] == "user" else "assistant"
+            messages.append({"role": role, "content": msg["text"]})
+
+    if figure_image:
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": user_message},
+                {"type": "image_url", "image_url": {"url": figure_image}},
+            ],
+        })
+    else:
+        messages.append({"role": "user", "content": user_message})
+
+    _log_prompt(messages)
+
+    stream = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        temperature=0.7,
+        max_tokens=800,
+        stream=True,
+    )
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta
 
 
 def summarize_reply(answer: str) -> str:

@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { FastForward, FileText, MessageCircle, Pause, Play, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import './App.css'
@@ -31,7 +35,8 @@ type LessonState = 'idle' | 'playing' | 'paused' | 'question'
 function App() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
-  const [pdfSelection, setPdfSelection] = useState('')
+  const [pendingPdfSelection, setPendingPdfSelection] = useState('')
+  const [pdfSelections, setPdfSelections] = useState<string[]>([])
 
   const [numPages, setNumPages] = useState(0)
   const [containerWidth, setContainerWidth] = useState(600)
@@ -71,7 +76,6 @@ function App() {
   const pdfContainerRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const typewriterRef = useRef<number | null>(null)
   const messageIdRef = useRef(0)
 
   useEffect(() => {
@@ -106,12 +110,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem(FIGURES_STORAGE_KEY, JSON.stringify(figures))
   }, [figures])
-
-  useEffect(() => {
-    return () => {
-      if (typewriterRef.current !== null) cancelAnimationFrame(typewriterRef.current)
-    }
-  }, [])
 
   const handleDrawMouseDown = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
     // Autorater capture mode: free-drag region selection
@@ -270,10 +268,22 @@ function App() {
     if (editMode) return
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) {
-      setPdfSelection('')
+      setPendingPdfSelection('')
       return
     }
-    setPdfSelection(selection.toString().trim())
+    setPendingPdfSelection(selection.toString().trim())
+  }
+
+  const confirmPdfSelection = () => {
+    const text = pendingPdfSelection.trim()
+    if (!text) return
+    setPdfSelections(prev => [...prev, text])
+    setPendingPdfSelection('')
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const removePdfSelectionAt = (idx: number) => {
+    setPdfSelections(prev => prev.filter((_, i) => i !== idx))
   }
 
   const startAutoraterSession = async (imageB64: string) => {
@@ -344,7 +354,8 @@ function App() {
       await sendAutoraterMessage()
       return
     }
-    const messageText = input.trim() || ((pdfSelection || clickedFigure) ? 'Explain this.' : '')
+    const hasContext = pdfSelections.length > 0 || clickedFigure
+    const messageText = input.trim() || (hasContext ? 'Explain this.' : '')
     if (!messageText) return
 
     setShowChat(true)
@@ -352,7 +363,11 @@ function App() {
     setInput('')
 
     const body: { message: string; pdf_context?: string; figure_context?: string; figure_image?: string; current_video_time?: number } = { message: messageText }
-    if (pdfSelection) body.pdf_context = pdfSelection
+    if (pdfSelections.length > 0) {
+      body.pdf_context = pdfSelections
+        .map((s, i) => `Passage ${i + 1}:\n"""\n${s}\n"""`)
+        .join('\n\n')
+    }
     if (clickedFigure) {
       const desc = clickedFigure.description ? clickedFigure.description : '(no description)'
       body.figure_context = `Label: ${clickedFigure.label}. Description: ${desc}`
@@ -362,74 +377,70 @@ function App() {
       body.current_video_time = videoRef.current.currentTime
     }
 
-    setPdfSelection('')
+    setPdfSelections([])
+    setPendingPdfSelection('')
     setClickedFigure(null)
     setClickedFigureImage(null)
     window.getSelection()?.removeAllRanges()
 
+    const msgId = ++messageIdRef.current
+    setMessages(prev => [...prev, { role: 'assistant', text: '', id: msgId }])
+
     try {
-      const response = await fetch('http://localhost:8000/api/v1/chat', {
+      const response = await fetch('http://localhost:8000/api/v1/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const data = await response.json()
-
-      const msgId = ++messageIdRef.current
-      setMessages(prev => [...prev, { role: 'assistant', text: '', id: msgId }])
-
-      fetchTTS(data.reply)
-        .then(url => {
-          const audio = new Audio(url)
-          audio.onplay = () => startTypewriterAnimation(audio, data.reply, msgId)
-          audio.onended = () => {
-            URL.revokeObjectURL(url)
-            setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: data.reply } : m))
-          }
-          audio.play()
-        })
-        .catch(console.error)
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+      await consumeSSE(response.body, msgId)
     } catch (error) {
       console.error('Error:', error)
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '⚠️ Failed to reach the assistant.' } : m))
     }
   }
 
-  const startTypewriterAnimation = (audio: HTMLAudioElement, content: string, msgId: number, pauseTime: number = 0) => {
-    if (typewriterRef.current !== null) {
-      cancelAnimationFrame(typewriterRef.current)
-      typewriterRef.current = null
-    }
+  const consumeSSE = async (stream: ReadableStream<Uint8Array>, msgId: number) => {
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
 
-    let lastUpdate = 0
-    const tick = (timestamp: number) => {
-      if (audio.paused || audio.ended) {
-        if (audio.ended) {
-          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: content } : m))
-          typewriterRef.current = null
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        let sepIdx
+        while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sepIdx)
+          buffer = buffer.slice(sepIdx + 2)
+
+          for (const line of rawEvent.split('\n')) {
+            if (!line.startsWith('data: ')) continue
+            const data = line.slice(6)
+            try {
+              const obj = JSON.parse(data)
+              if (typeof obj.delta === 'string') {
+                setMessages(prev => prev.map(m =>
+                  m.id === msgId ? { ...m, text: m.text + obj.delta } : m
+                ))
+              } else if (obj.error) {
+                setMessages(prev => prev.map(m =>
+                  m.id === msgId ? { ...m, text: `⚠️ ${obj.error}` } : m
+                ))
+              }
+            } catch {
+              // Ignore non-JSON chunks (e.g. heartbeats).
+            }
+          }
         }
-        return
       }
-      if (timestamp - lastUpdate > 50) {
-        lastUpdate = timestamp
-        const elapsed = audio.currentTime - pauseTime
-        const remaining = audio.duration > 0 ? audio.duration - pauseTime : 1
-        const ratio = Math.max(0, Math.min(elapsed / remaining, 1))
-        const charCount = Math.ceil(ratio * content.length)
-        setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: content.slice(0, charCount) } : m))
-      }
-      typewriterRef.current = requestAnimationFrame(tick)
+    } finally {
+      reader.releaseLock()
     }
-    typewriterRef.current = requestAnimationFrame(tick)
-  }
-
-  const fetchTTS = async (text: string): Promise<string> => {
-    const res = await fetch('http://localhost:8000/api/v1/lesson/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
-    const blob = await res.blob()
-    return URL.createObjectURL(blob)
   }
 
   const startLesson = () => {
@@ -511,6 +522,16 @@ function App() {
               <X size={18} />
             </button>
           </div>
+
+          {!autoraterMode && pendingPdfSelection && (
+            <button
+              className="btn-pdf-select"
+              onClick={confirmPdfSelection}
+              title="Add this passage to the chat prompt"
+            >
+              + Select
+            </button>
+          )}
 
           <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
             {autoraterMode && !autoraterStarted ? (
@@ -687,7 +708,18 @@ function App() {
             <div className="chat-window" ref={scrollRef}>
               {messages.map((msg, idx) => (
                 <div key={idx} className={`bubble ${msg.role}`}>
-                  {msg.text}
+                  {msg.role === 'assistant' ? (
+                    <div className="markdown-body">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
               ))}
             </div>
@@ -705,10 +737,22 @@ function App() {
               </div>
             )}
 
-            {!autoraterMode && pdfSelection && (
-              <div className="pdf-selection-bar">
-                <span>Text selected</span>
-                <button onClick={() => { setPdfSelection(''); window.getSelection()?.removeAllRanges() }}>x</button>
+            {!autoraterMode && pdfSelections.length > 0 && (
+              <div className="pdf-selection-list">
+                {pdfSelections.map((sel, i) => (
+                  <div key={i} className="pdf-selection-chip" title={sel}>
+                    <span className="pdf-selection-chip-label">
+                      #{i + 1} {sel.length > 40 ? sel.slice(0, 40) + '…' : sel}
+                    </span>
+                    <button
+                      className="pdf-selection-chip-remove"
+                      onClick={() => removePdfSelectionAt(i)}
+                      aria-label="Remove passage"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
