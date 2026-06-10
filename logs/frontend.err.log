@@ -1,0 +1,328 @@
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:29:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_6": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_6": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_8": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_8": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:31:26[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:49:27[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:49:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:49:28[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:04[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 16" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 22" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 23" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 24" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 30" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 7" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 8" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 12" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 16" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 22" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 23" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 24" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 30" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 40" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 59" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 60" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 62" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 68" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 69" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 40" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 59" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 60" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 62" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 68" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 69" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 7" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 8" task: "Error: Worker task was terminated".
+[2m오후 4:55:33[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 12" task: "Error: Worker task was terminated".
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:37[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 38" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 40" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 41" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 42" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 43" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 44" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 45" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 46" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 2" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 3" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 4" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 5" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 6" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 7" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 8" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 9" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 10" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 11" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 12" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 13" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 14" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 15" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 16" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 17" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 18" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 19" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 20" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 21" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 22" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 23" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 24" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 25" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 26" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 27" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 28" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 29" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 30" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 31" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 32" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 33" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 34" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 35" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 36" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 37" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 38" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 39" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 40" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 41" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 42" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 43" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 44" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 45" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 46" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 47" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 48" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 49" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 50" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 51" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 52" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 53" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 54" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 55" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 56" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 57" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 58" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 59" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 60" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 61" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 62" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 64" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 66" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 67" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 68" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 69" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 70" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 47" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 48" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 49" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 50" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 51" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 52" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 53" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 54" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 55" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 56" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 57" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 58" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 59" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 60" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 61" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 62" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 64" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 66" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 67" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 68" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 69" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 70" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 1" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 1" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 2" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 3" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 4" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 5" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 6" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 7" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 8" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 9" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 10" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 11" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 12" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 13" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 14" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 15" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 16" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 17" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 18" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 20" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 21" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 22" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 23" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 24" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 25" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 26" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 27" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 28" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 29" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 30" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 31" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 33" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 34" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 35" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 36" task: "Error: Worker task was terminated".
+[2m오후 4:55:48[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: getTextContent - ignoring errors during "GetTextContent: page 37" task: "Error: Worker task was terminated".
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:34[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 4:56:39[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:05:21[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:21:46[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: TypeError: Failed to fetch
+    at startExampleWithIsabella (http://127.0.0.1:8080/src/App.tsx?t=1780733895946:326:27)
+    at executeDispatch (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:9140:5)
+    at runWithFiberInDEV (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:850:66)
+    at processDispatchQueue (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:9166:27)
+    at http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:9453:5
+    at batchedUpdates$1 (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:2043:12)
+    at dispatchEventForPluginEventSystem (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:9239:4)
+    at dispatchEvent (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:11318:29)
+    at dispatchDiscreteEvent (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=e4458d18:11300:56)
+    at <anonymous>:1:75
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:41:43[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:42:46[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled rejection] [1mNotSupportedError[22m: Failed to load because no supported source was found.
+[39m
+[2m오후 5:42:46[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Cannot read properties of undefined (reading 'length')
+[39m > tick src/App.tsx?t=1780734994950:284:49
+
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 5:43:18[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#instantiateWasm: UnknownErrorException: Ensure that the `wasmUrl` API parameter is provided.
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: JpxImage#getJsModule: TypeError: Failed to resolve module specifier 'nullopenjpeg_nowasm_fallback.js'
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p6_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p32_3": "JpxError: OpenJPEG failed to initialize".
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p38_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Unable to decode image "img_p46_4": "JpxError: OpenJPEG failed to initialize".
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 6:03:46[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mWarning: Dependent image isn't ready yet
+[2m오후 6:03:57[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Cannot read properties of undefined (reading 'length')
+[39m > tick src/App.tsx:324:52
+    322 |          const remaining = audio.duration > 0 ? audio.duration - pauseTime : 1
+    323 |          const ratio = Math.max(0, Math.min(elapsed / remaining, 1))
+    324 |          const charCount = Math.ceil(ratio * content.length)
+        |                                                      ^
+    325 |          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: content.slice(0, charCount) } : m))
+    326 |        }
+
+[2m오후 6:03:57[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled rejection] [1mNotSupportedError[22m: Failed to load because no supported source was found.
+[39m
+[2m오후 6:06:13[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: Cannot read properties of undefined (reading 'length')
+[39m > tick src/App.tsx:324:52
+    322 |          const remaining = audio.duration > 0 ? audio.duration - pauseTime : 1
+    323 |          const ratio = Math.max(0, Math.min(elapsed / remaining, 1))
+    324 |          const charCount = Math.ceil(ratio * content.length)
+        |                                                      ^
+    325 |          setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: content.slice(0, charCount) } : m))
+    326 |        }
+
+[2m오후 6:06:13[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled rejection] [1mNotSupportedError[22m: Failed to load because no supported source was found.
+[39m

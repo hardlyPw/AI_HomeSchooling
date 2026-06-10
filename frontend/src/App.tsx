@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
+import { FastForward, FileText, MessageCircle, Pause, Play, X } from 'lucide-react'
 import 'react-pdf/dist/Page/TextLayer.css'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import './App.css'
@@ -10,17 +11,17 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString()
 
 interface Message {
-  role: 'user' | 'assistant';
-  text: string;
-  id?: number;
+  role: 'user' | 'assistant'
+  text: string
+  id?: number
 }
 
 interface Figure {
-  id: string;
-  page: number;
-  bbox: { x: number; y: number; x2: number; y2: number };
-  label: string;
-  description: string;
+  id: string
+  page: number
+  bbox: { x: number; y: number; x2: number; y2: number }
+  label: string
+  description: string
 }
 
 const FIGURES_STORAGE_KEY = 'home_schooling_figures_v1'
@@ -28,58 +29,72 @@ const FIGURES_STORAGE_KEY = 'home_schooling_figures_v1'
 type LessonState = 'idle' | 'playing' | 'paused' | 'question'
 
 function App() {
-  // 채팅
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [pdfSelection, setPdfSelection] = useState('')
 
-  // PDF 뷰어
   const [numPages, setNumPages] = useState(0)
   const [containerWidth, setContainerWidth] = useState(600)
   const [figures, setFigures] = useState<Figure[]>(() => {
     const stored = localStorage.getItem(FIGURES_STORAGE_KEY)
     if (stored) {
-      try { return JSON.parse(stored) as Figure[] } catch { /* fall through */ }
+      try {
+        return JSON.parse(stored) as Figure[]
+      } catch {
+        // Fall back to bundled figures.
+      }
     }
     return []
   })
   const [clickedFigure, setClickedFigure] = useState<Figure | null>(null)
   const [clickedFigureImage, setClickedFigureImage] = useState<string | null>(null)
 
-  // Figure 편집 모드
   const [editMode, setEditMode] = useState(false)
   const [drawing, setDrawing] = useState<{ pageNum: number; startX: number; startY: number; curX: number; curY: number } | null>(null)
   const [pendingFigure, setPendingFigure] = useState<{ page: number; bbox: { x: number; y: number; x2: number; y2: number } } | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editDescription, setEditDescription] = useState('')
 
-  // 수업 재생
   const [lessonState, setLessonState] = useState<LessonState>('idle')
+  const [showChat, setShowChat] = useState(false)
+  const [showPdf, setShowPdf] = useState(false)
+
+  // Autorater (Isabella) mode state
+  const [autoraterMode, setAutoraterMode] = useState(false)
+  const [autoraterStarted, setAutoraterStarted] = useState(false)
+  const [autoraterLoading, setAutoraterLoading] = useState(false)
+  const [autoraterCaptureDraw, setAutoraterCaptureDraw] = useState<{
+    pageNum: number; startX: number; startY: number; curX: number; curY: number
+  } | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const pdfContainerRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const typewriterRef = useRef<number | null>(null)
+  const messageIdRef = useRef(0)
 
-  // 자동 스크롤
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, showChat])
 
-  // PDF 컨테이너 너비 감지
   useEffect(() => {
-    if (!pdfContainerRef.current) return
+    if (!showPdf || !pdfContainerRef.current) return
     const observer = new ResizeObserver(entries => {
-      setContainerWidth(entries[0].contentRect.width)
+      setContainerWidth(Math.max(320, Math.floor(entries[0].contentRect.width)))
     })
     observer.observe(pdfContainerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [showPdf])
 
-  // figures.json 로드 (localStorage 비었을 때만 seed로 사용)
+  useEffect(() => {
+    if (!showChat) return
+    const timeout = window.setTimeout(() => chatInputRef.current?.focus(), 100)
+    return () => window.clearTimeout(timeout)
+  }, [showChat])
+
   useEffect(() => {
     if (localStorage.getItem(FIGURES_STORAGE_KEY)) return
     fetch('/assets/figures.json')
@@ -88,35 +103,80 @@ function App() {
       .catch(console.error)
   }, [])
 
-  // figures 변경 시 localStorage 자동 저장
   useEffect(() => {
     localStorage.setItem(FIGURES_STORAGE_KEY, JSON.stringify(figures))
   }, [figures])
 
-  // 언마운트 시 타이프라이터 정리
   useEffect(() => {
     return () => {
       if (typewriterRef.current !== null) cancelAnimationFrame(typewriterRef.current)
     }
   }, [])
 
-  // ── Figure 편집 ──────────────────────────────────────────────────
   const handleDrawMouseDown = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
+    // Autorater capture mode: free-drag region selection
+    if (autoraterMode && !autoraterStarted) {
+      e.preventDefault()
+      const rect = e.currentTarget.getBoundingClientRect()
+      setAutoraterCaptureDraw({
+        pageNum,
+        startX: e.clientX - rect.left,
+        startY: e.clientY - rect.top,
+        curX: e.clientX - rect.left,
+        curY: e.clientY - rect.top,
+      })
+      return
+    }
     if (!editMode) return
     e.preventDefault()
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    setDrawing({ pageNum, startX: x, startY: y, curX: x, curY: y })
+    setDrawing({
+      pageNum,
+      startX: e.clientX - rect.left,
+      startY: e.clientY - rect.top,
+      curX: e.clientX - rect.left,
+      curY: e.clientY - rect.top,
+    })
   }
 
   const handleDrawMouseMove = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
+    if (autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      setAutoraterCaptureDraw(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
+      return
+    }
     if (!editMode || !drawing || drawing.pageNum !== pageNum) return
     const rect = e.currentTarget.getBoundingClientRect()
     setDrawing(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
   }
 
   const handleDrawMouseUp = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
+    // Autorater capture: crop and send the drawn region as image
+    if (autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum) {
+      const draw = autoraterCaptureDraw
+      setAutoraterCaptureDraw(null)
+      const rect = e.currentTarget.getBoundingClientRect()
+      const curX = e.clientX - rect.left
+      const curY = e.clientY - rect.top
+      if (Math.abs(curX - draw.startX) < 10 || Math.abs(curY - draw.startY) < 10) return
+
+      const sourceCanvas = e.currentTarget.querySelector('canvas') as HTMLCanvasElement | null
+      if (!sourceCanvas) return
+      const renderScale = sourceCanvas.width / containerWidth
+      const sx = Math.min(draw.startX, curX) * renderScale
+      const sy = Math.min(draw.startY, curY) * renderScale
+      const sw = Math.abs(curX - draw.startX) * renderScale
+      const sh = Math.abs(curY - draw.startY) * renderScale
+      const out = document.createElement('canvas')
+      out.width = Math.max(1, Math.round(sw))
+      out.height = Math.max(1, Math.round(sh))
+      const ctx = out.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height)
+      startAutoraterSession(out.toDataURL('image/png'))
+      return
+    }
+
     if (!editMode || !drawing || drawing.pageNum !== pageNum) return
     const rect = e.currentTarget.getBoundingClientRect()
     const scale = containerWidth / 595.3
@@ -169,7 +229,6 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  // ── PDF Figure 클릭 (일반 모드) ──────────────────────────────────
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, pageNumber: number) => {
     if (editMode) return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -185,13 +244,12 @@ function App() {
 
     setClickedFigure(found)
 
-    // PDF canvas에서 bbox 영역을 잘라 base64 PNG로 저장
     const sourceCanvas = e.currentTarget.querySelector('canvas') as HTMLCanvasElement | null
     if (!sourceCanvas) {
       setClickedFigureImage(null)
       return
     }
-    const renderScale = sourceCanvas.width / (containerWidth)
+    const renderScale = sourceCanvas.width / containerWidth
     const sx = found.bbox.x * scale * renderScale
     const sy = found.bbox.y * scale * renderScale
     const sw = (found.bbox.x2 - found.bbox.x) * scale * renderScale
@@ -208,7 +266,6 @@ function App() {
     setClickedFigureImage(out.toDataURL('image/png'))
   }
 
-  // ── PDF 텍스트 선택 ──────────────────────────────────────────────
   const handleMouseUp = () => {
     if (editMode) return
     const selection = window.getSelection()
@@ -219,11 +276,78 @@ function App() {
     setPdfSelection(selection.toString().trim())
   }
 
-  // ── 채팅 전송 ────────────────────────────────────────────────────
+  const startAutoraterSession = async (imageB64: string) => {
+    setAutoraterLoading(true)
+    const msgId = ++messageIdRef.current
+    setMessages(prev => [...prev, { role: 'assistant', text: 'Analyzing problem...', id: msgId }])
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/autorater/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64: imageB64 }),
+      })
+      if (!response.ok) {
+        const detail = await response.text().catch(() => response.statusText)
+        throw new Error(`HTTP ${response.status}: ${detail}`)
+      }
+      const data = await response.json()
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: `Isabella: ${data.opener}` } : m))
+      setAutoraterStarted(true)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('Error starting autorater:', msg)
+      setMessages(prev => prev.map(m =>
+        m.id === msgId ? { ...m, text: `Failed to start: ${msg}` } : m
+      ))
+    } finally {
+      setAutoraterLoading(false)
+    }
+  }
+
+  const sendAutoraterMessage = async () => {
+    const messageText = input.trim()
+    if (!messageText || autoraterLoading) return
+
+    setMessages(prev => [...prev, { role: 'user', text: messageText }])
+    setInput('')
+    setAutoraterLoading(true)
+
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/autorater/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: messageText }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const data = await response.json()
+
+      setMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.reply}` }])
+      if (data.next_opener) {
+        setMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.next_opener}` }])
+      }
+      if (data.is_done) {
+        setAutoraterMode(false)
+        setAutoraterStarted(false)
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('Error in autorater chat:', msg)
+      setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${msg}` }])
+    } finally {
+      setAutoraterLoading(false)
+    }
+  }
+
   const sendMessage = async () => {
+    if (autoraterStarted && autoraterMode) {
+      await sendAutoraterMessage()
+      return
+    }
     const messageText = input.trim() || ((pdfSelection || clickedFigure) ? 'Explain this.' : '')
     if (!messageText) return
 
+    setShowChat(true)
     setMessages(prev => [...prev, { role: 'user', text: messageText }])
     setInput('')
 
@@ -251,7 +375,7 @@ function App() {
       })
       const data = await response.json()
 
-      const msgId = Date.now()
+      const msgId = ++messageIdRef.current
       setMessages(prev => [...prev, { role: 'assistant', text: '', id: msgId }])
 
       fetchTTS(data.reply)
@@ -270,7 +394,6 @@ function App() {
     }
   }
 
-  // ── 타이프라이터 ─────────────────────────────────────────────────
   const startTypewriterAnimation = (audio: HTMLAudioElement, content: string, msgId: number, pauseTime: number = 0) => {
     if (typewriterRef.current !== null) {
       cancelAnimationFrame(typewriterRef.current)
@@ -299,7 +422,6 @@ function App() {
     typewriterRef.current = requestAnimationFrame(tick)
   }
 
-  // ── 수업 재생 (영상) ─────────────────────────────────────────────
   const fetchTTS = async (text: string): Promise<string> => {
     const res = await fetch('http://localhost:8000/api/v1/lesson/tts', {
       method: 'POST',
@@ -325,10 +447,19 @@ function App() {
     setLessonState('playing')
   }
 
-  const askQuestion = () => {
-    videoRef.current?.pause()
-    setLessonState('question')
-    setTimeout(() => chatInputRef.current?.focus(), 100)
+  const enterAutoraterMode = () => {
+    // 2-1: Open chat without clearing history
+    setShowChat(true)
+    // 2-2: Stop the video and open PDF in drag-select capture mode
+    if (videoRef.current) {
+      videoRef.current.pause()
+    }
+    setLessonState('paused')
+    setShowPdf(true)
+    setEditMode(false)
+    setAutoraterMode(true)
+    setAutoraterStarted(false)
+    setAutoraterCaptureDraw(null)
   }
 
   const handlePlayBtn = () => {
@@ -337,111 +468,169 @@ function App() {
     else if (lessonState === 'paused' || lessonState === 'question') resumeLesson()
   }
 
-  const playBtnLabel = () => {
-    if (lessonState === 'playing') return '⏸'
-    return '▶'
+  const playBtnIcon = () => {
+    if (lessonState === 'playing') return <Pause size={20} strokeWidth={2.6} />
+    return <Play size={20} strokeWidth={2.6} fill="currentColor" />
   }
 
   return (
     <div className="main-layout">
+      <div className="teacher-view">
+        <video
+          ref={videoRef}
+          src="/assets/video.mp4"
+          className="character-video"
+          onEnded={() => setLessonState('paused')}
+          playsInline
+        />
 
-      {/* ================= 왼쪽: PDF 영역 ================= */}
-      <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
+        {lessonState === 'question' && (
+          <div className="lesson-progress">Asking question</div>
+        )}
 
-        {/* Figure 편집 툴바 */}
-        <div className="figure-toolbar">
-          <button
-            className={`btn-figure-edit ${editMode ? 'active' : ''}`}
-            onClick={() => { setEditMode(prev => !prev); setDrawing(null); setPendingFigure(null) }}
-          >
-            {editMode ? '✏️ Editing — click to exit' : '+ Add Figure'}
+        <div className="lesson-buttons" aria-label="Lesson controls">
+          <button className="btn-play" onClick={handlePlayBtn} aria-label={lessonState === 'playing' ? 'Pause lesson' : 'Play lesson'}>
+            {playBtnIcon()}
           </button>
-          {editMode && (
-            <>
-              <span className="figure-edit-hint">Drag to draw a box</span>
-              <button className="btn-export" onClick={exportFigures}>⬇ Export JSON</button>
-            </>
-          )}
-        </div>
-
-        <div className="pdf-scroll" style={{ height: editMode ? 'calc(100% - 44px)' : 'calc(100% - 44px)' }}>
-          <Document
-            file="/assets/Chapter4.pdf"
-            onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+          <button
+            className={`btn-question ${autoraterMode ? 'active' : ''}`}
+            onClick={enterAutoraterMode}
+            aria-label="Practice with Isabella"
+            title="Practice with Isabella"
           >
-            {Array.from({ length: numPages }, (_, i) => {
-              const pageNum = i + 1
-              const scale = containerWidth / 595.3
-              const pageFigs = figures.filter(f => f.page === pageNum)
-              return (
-                <div
-                  key={pageNum}
-                  style={{
-                    position: 'relative',
-                    cursor: editMode ? 'crosshair' : 'default',
-                    userSelect: editMode ? 'none' : 'auto',
-                  }}
-                  onClick={e => handlePageClick(e, pageNum)}
-                  onMouseDown={e => handleDrawMouseDown(e, pageNum)}
-                  onMouseMove={e => handleDrawMouseMove(e, pageNum)}
-                  onMouseUp={e => handleDrawMouseUp(e, pageNum)}
-                >
-                  <Page
-                    pageNumber={pageNum}
-                    width={containerWidth}
-                    renderTextLayer
-                    renderAnnotationLayer={false}
-                  />
-
-                  {/* 편집 모드: 기존 Figure 오버레이 */}
-                  {editMode && pageFigs.map(f => (
-                    <div
-                      key={f.id}
-                      style={{
-                        position: 'absolute',
-                        left: f.bbox.x * scale,
-                        top: f.bbox.y * scale,
-                        width: (f.bbox.x2 - f.bbox.x) * scale,
-                        height: (f.bbox.y2 - f.bbox.y) * scale,
-                        border: '2px solid #e53935',
-                        backgroundColor: 'rgba(229,57,53,0.08)',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      <div className="figure-overlay-label">
-                        <span>{f.label}</span>
-                        <button
-                          className="figure-overlay-delete"
-                          onClick={e => { e.stopPropagation(); deleteFigure(f.id) }}
-                        >✕</button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* 드래그 중 미리보기 */}
-                  {editMode && drawing && drawing.pageNum === pageNum && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: Math.min(drawing.startX, drawing.curX),
-                        top: Math.min(drawing.startY, drawing.curY),
-                        width: Math.abs(drawing.curX - drawing.startX),
-                        height: Math.abs(drawing.curY - drawing.startY),
-                        border: '2px dashed #1565c0',
-                        backgroundColor: 'rgba(21,101,192,0.1)',
-                        pointerEvents: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </Document>
+            <FastForward size={20} strokeWidth={2.5} />
+          </button>
         </div>
       </div>
 
-      {/* ================= Figure 추가 다이얼로그 ================= */}
+      {showPdf && (
+        <div className="floating-panel pdf-panel">
+          <div className="panel-header">
+            <span>Textbook</span>
+            <button className="panel-close" onClick={() => setShowPdf(false)} aria-label="Close textbook">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
+            {autoraterMode && !autoraterStarted ? (
+              <div className="autorater-capture-toolbar">
+                <span className="autorater-capture-hint">
+                  {autoraterLoading ? 'Analyzing…' : 'Draw a box around an example problem to start practicing with Isabella'}
+                </span>
+              </div>
+            ) : (
+              <div className="figure-toolbar">
+                <button
+                  className={`btn-figure-edit ${editMode ? 'active' : ''}`}
+                  onClick={() => { setEditMode(prev => !prev); setDrawing(null); setPendingFigure(null) }}
+                >
+                  {editMode ? 'Editing' : '+ Add Figure'}
+                </button>
+                {editMode && (
+                  <>
+                    <span className="figure-edit-hint">Drag to draw a box</span>
+                    <button className="btn-export" onClick={exportFigures}>Export JSON</button>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="pdf-scroll">
+              <Document
+                file="/assets/Chapter4.pdf"
+                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+              >
+                {Array.from({ length: numPages }, (_, i) => {
+                  const pageNum = i + 1
+                  const scale = containerWidth / 595.3
+                  const pageFigs = figures.filter(f => f.page === pageNum)
+                  return (
+                    <div
+                      key={pageNum}
+                      style={{
+                        position: 'relative',
+                        cursor: editMode || (autoraterMode && !autoraterStarted) ? 'crosshair' : 'default',
+                        userSelect: editMode || (autoraterMode && !autoraterStarted) ? 'none' : 'auto',
+                      }}
+                      onClick={e => handlePageClick(e, pageNum)}
+                      onMouseDown={e => handleDrawMouseDown(e, pageNum)}
+                      onMouseMove={e => handleDrawMouseMove(e, pageNum)}
+                      onMouseUp={e => handleDrawMouseUp(e, pageNum)}
+                    >
+                      <Page
+                        pageNumber={pageNum}
+                        width={containerWidth}
+                        renderTextLayer
+                        renderAnnotationLayer={false}
+                      />
+
+                      {editMode && pageFigs.map(f => (
+                        <div
+                          key={f.id}
+                          style={{
+                            position: 'absolute',
+                            left: f.bbox.x * scale,
+                            top: f.bbox.y * scale,
+                            width: (f.bbox.x2 - f.bbox.x) * scale,
+                            height: (f.bbox.y2 - f.bbox.y) * scale,
+                            border: '2px solid #e53935',
+                            backgroundColor: 'rgba(229,57,53,0.08)',
+                            boxSizing: 'border-box',
+                          }}
+                        >
+                          <div className="figure-overlay-label">
+                            <span>{f.label}</span>
+                            <button
+                              className="figure-overlay-delete"
+                              onClick={e => { e.stopPropagation(); deleteFigure(f.id) }}
+                            >
+                              x
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {editMode && drawing && drawing.pageNum === pageNum && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: Math.min(drawing.startX, drawing.curX),
+                            top: Math.min(drawing.startY, drawing.curY),
+                            width: Math.abs(drawing.curX - drawing.startX),
+                            height: Math.abs(drawing.curY - drawing.startY),
+                            border: '2px dashed #1565c0',
+                            backgroundColor: 'rgba(21,101,192,0.1)',
+                            pointerEvents: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      )}
+
+                      {autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: Math.min(autoraterCaptureDraw.startX, autoraterCaptureDraw.curX),
+                            top: Math.min(autoraterCaptureDraw.startY, autoraterCaptureDraw.curY),
+                            width: Math.abs(autoraterCaptureDraw.curX - autoraterCaptureDraw.startX),
+                            height: Math.abs(autoraterCaptureDraw.curY - autoraterCaptureDraw.startY),
+                            border: '2px dashed #16a34a',
+                            backgroundColor: 'rgba(22,163,74,0.12)',
+                            pointerEvents: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </Document>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingFigure && (
         <div
           className="figure-dialog-overlay"
@@ -450,8 +639,7 @@ function App() {
           <div className="figure-dialog">
             <h3>Add Figure</h3>
             <p className="figure-dialog-meta">
-              Page {pendingFigure.page} &nbsp;|&nbsp;
-              ({pendingFigure.bbox.x}, {pendingFigure.bbox.y}) ~ ({pendingFigure.bbox.x2}, {pendingFigure.bbox.y2})
+              Page {pendingFigure.page} | ({pendingFigure.bbox.x}, {pendingFigure.bbox.y}) - ({pendingFigure.bbox.x2}, {pendingFigure.bbox.y2})
             </p>
             <label className="figure-dialog-label">
               Label
@@ -464,7 +652,7 @@ function App() {
               />
             </label>
             <label className="figure-dialog-label">
-              Description <span style={{ fontWeight: 'normal', color: '#888' }}>(included in the prompt)</span>
+              Description <span className="optional-label">(included in the prompt)</span>
               <textarea
                 value={editDescription}
                 onChange={e => setEditDescription(e.target.value)}
@@ -486,73 +674,88 @@ function App() {
         </div>
       )}
 
-      {/* ================= 오른쪽: 선생님 + 채팅 영역 ================= */}
-      <div className="right-section">
-
-        {/* 오른쪽 위: 선생님 화면 */}
-        <div className="teacher-view">
-          <video
-            ref={videoRef}
-            src="/assets/video.mp4"
-            className="character-video"
-            onEnded={() => setLessonState('paused')}
-            playsInline
-          />
-          {lessonState === 'question' && (
-            <div className="lesson-progress">Asking question</div>
-          )}
-
-          <div className="lesson-buttons">
-            <button className="btn-play" onClick={handlePlayBtn}>
-              {playBtnLabel()}
-            </button>
-            <button
-              className="btn-question"
-              onClick={askQuestion}
-              disabled={lessonState === 'idle' || lessonState === 'question'}
-            >
-              ❓
+      {showChat && (
+        <div className="floating-panel chat-panel">
+          <div className="panel-header">
+            <span>{autoraterMode ? 'Isabella — Practice' : 'Chat'}</span>
+            <button className="panel-close" onClick={() => setShowChat(false)} aria-label="Close chat">
+              <X size={18} />
             </button>
           </div>
-        </div>
 
-        {/* 오른쪽 아래: 채팅 */}
-        <div className="chat-view">
-          <div className="chat-window" ref={scrollRef}>
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`bubble ${msg.role}`}>
-                {msg.text}
+          <div className="chat-view">
+            <div className="chat-window" ref={scrollRef}>
+              {messages.map((msg, idx) => (
+                <div key={idx} className={`bubble ${msg.role}`}>
+                  {msg.text}
+                </div>
+              ))}
+            </div>
+
+            {autoraterMode && !autoraterStarted && (
+              <div className="autorater-chat-hint">
+                Draw a box around a problem in the textbook to begin.
               </div>
-            ))}
-          </div>
+            )}
 
-          {clickedFigure && (
-            <div className="pdf-selection-bar">
-              <span>🖼 {clickedFigure.label} clicked</span>
-              <button onClick={() => setClickedFigure(null)}>✕</button>
+            {!autoraterMode && clickedFigure && (
+              <div className="pdf-selection-bar">
+                <span>{clickedFigure.label} clicked</span>
+                <button onClick={() => setClickedFigure(null)}>x</button>
+              </div>
+            )}
+
+            {!autoraterMode && pdfSelection && (
+              <div className="pdf-selection-bar">
+                <span>Text selected</span>
+                <button onClick={() => { setPdfSelection(''); window.getSelection()?.removeAllRanges() }}>x</button>
+              </div>
+            )}
+
+            <div className="input-area">
+              <input
+                ref={chatInputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && sendMessage()}
+                placeholder={
+                  autoraterMode && !autoraterStarted
+                    ? 'Select a problem from the textbook first…'
+                    : autoraterMode
+                    ? 'Reply to Isabella…'
+                    : 'Type a message…'
+                }
+                disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
+              />
+              <button
+                onClick={sendMessage}
+                disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
+              >
+                {autoraterLoading ? '…' : 'Send'}
+              </button>
             </div>
-          )}
-
-          {pdfSelection && (
-            <div className="pdf-selection-bar">
-              <span>📄 Dragged</span>
-              <button onClick={() => { setPdfSelection(''); window.getSelection()?.removeAllRanges() }}>✕</button>
-            </div>
-          )}
-
-          <div className="input-area">
-            <input
-              ref={chatInputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
-              placeholder={lessonState === 'question' ? 'Type your question...' : 'Type a message...'}
-            />
-            <button onClick={sendMessage}>Send</button>
           </div>
         </div>
-      </div>
+      )}
 
+      <div className="quick-actions" aria-label="Study tools">
+        <button
+          className={`quick-action ${showPdf ? 'active' : ''}`}
+          onClick={() => setShowPdf(prev => !prev)}
+          aria-label={showPdf ? 'Hide textbook' : 'Show textbook'}
+          title={showPdf ? 'Hide textbook' : 'Show textbook'}
+        >
+          <FileText size={22} />
+        </button>
+        <button
+          className={`quick-action ${showChat ? 'active' : ''}`}
+          onClick={() => setShowChat(prev => !prev)}
+          aria-label={showChat ? 'Hide chat' : 'Show chat'}
+          title={showChat ? 'Hide chat' : 'Show chat'}
+        >
+          <MessageCircle size={22} />
+        </button>
+      </div>
     </div>
   )
 }

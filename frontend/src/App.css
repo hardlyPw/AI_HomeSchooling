@@ -1,99 +1,45 @@
-/* =========================================
-   1. Vite 기본 설정 강제 초기화
-   ========================================= */
 #root {
+  width: 100%;
   max-width: 100%;
+  height: 100vh;
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100vh;
   text-align: left;
 }
 
-body, html {
+body,
+html {
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
-  width: 100%;
-  height: 100%;
   overflow: hidden;
 }
 
-/* =========================================
-   2. 메인 레이아웃 (좌우 분할)
-   ========================================= */
+button,
+input,
+textarea {
+  font: inherit;
+}
+
 .main-layout {
-  display: flex;
+  position: relative;
   width: 100vw;
   height: 100vh;
-  background-color: #f0f0f0;
-}
-
-/* 왼쪽: PDF 영역 (절반 분할) */
-.pdf-section {
-  flex: 1;
-  border-right: 2px solid #ddd;
-  background-color: #f0f0f0;
-  position: relative;
+  height: 100dvh;
   overflow: hidden;
+  background: #050505;
+  color: #111;
 }
 
-.pdf-scroll {
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.pdf-scroll .react-pdf__Page {
-  margin-bottom: 8px;
-}
-
-.pdf-selection-bar {
+.teacher-view {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px 15px;
-  background-color: #fff9c4;
-  border-top: 1px solid #f0e060;
-  font-size: 0.8rem;
-  color: #555;
-}
-
-.pdf-selection-bar button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.9rem;
-  color: #888;
-  padding: 0 4px;
-}
-
-/* 오른쪽: 선생님+채팅 영역을 묶는 컨테이너 */
-.right-section {
-  flex: 1; /* 절반 분할 */
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-/* =========================================
-   3. 오른쪽 위: 선생님 영역
-   ========================================= */
-.teacher-view {
-  flex: 0.8; /* 오른쪽 세로 영역 중 40% 정도 차지 */
-  position: relative;
-  background-image: url('/assets/classroom_bg.png');
-  background-size: cover;
-  background-position: center;
-  display: flex;
   justify-content: center;
-  align-items: flex-end; /* 캐릭터를 바닥에 붙임 */
   overflow: hidden;
-  border-bottom: 2px solid #ddd;
-}
-
-.character-img {
-  height: 90%;
-  object-fit: contain;
+  background: #000;
 }
 
 .character-video {
@@ -103,145 +49,291 @@ body, html {
   background: #000;
 }
 
-.label {
-  position: absolute;
-  top: 15px;
-  left: 15px;
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  padding: 5px 15px;
-  border-radius: 15px;
-  font-size: 0.9rem;
-  font-weight: bold;
-}
-
 .lesson-progress {
   position: absolute;
-  top: 15px;
-  left: 15px;
-  background: rgba(0, 0, 0, 0.55);
+  top: 18px;
+  left: 18px;
+  z-index: 15;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(8, 10, 12, 0.68);
   color: #fff;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1;
+  backdrop-filter: blur(12px);
 }
 
 .lesson-buttons {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+}
+
+.btn-play,
+.btn-question,
+.quick-action,
+.panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
 }
 
 .btn-play,
 .btn-question {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 50%;
-  font-size: 1rem;
-  font-weight: bold;
-  color: #333;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+  color: #141414;
+  transition: transform 0.16s ease, background-color 0.16s ease, opacity 0.16s ease;
 }
 
 .btn-play {
-  background-color: #FEE500;
-  border: none;
-}
-
-.btn-play:hover {
-  background-color: #f0d800;
+  border: 0;
+  background: #fee500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .btn-question {
-  background-color: #fff;
-  border: 2px solid #FEE500;
+  border: 2px solid #fee500;
+  background: #fff;
 }
 
-.btn-question:hover:not(:disabled) {
-  background-color: #fff9c4;
+.btn-question.active {
+  border-color: #16a34a;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.btn-play:hover,
+.btn-question:hover:not(:disabled),
+.quick-action:hover,
+.panel-close:hover {
+  transform: translateY(-1px);
 }
 
 .btn-question:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* =========================================
-   4. 오른쪽 아래: 채팅 영역
-   ========================================= */
+.floating-panel {
+  position: absolute;
+  z-index: 30;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+.panel-header {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid #d9dee5;
+  background: #f8fafc;
+  color: #172033;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.panel-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #475569;
+}
+
+.panel-close:hover {
+  background: #e9eef5;
+}
+
+.pdf-panel {
+  top: 24px;
+  bottom: 24px;
+  left: 24px;
+  width: min(860px, 48vw);
+  min-width: 420px;
+}
+
+.pdf-section {
+  position: relative;
+  height: calc(100% - 44px);
+  overflow: hidden;
+  background: #eceff3;
+}
+
+.pdf-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.pdf-scroll .react-pdf__Page {
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.pdf-scroll .react-pdf__Page canvas {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+}
+
+.pdf-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  border-top: 1px solid #eed66a;
+  background: #fff6bf;
+  color: #564b17;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.pdf-selection-bar button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #6f641e;
+  cursor: pointer;
+}
+
+.chat-panel {
+  right: 92px;
+  bottom: 24px;
+  width: min(430px, calc(100vw - 132px));
+  height: min(560px, calc(100vh - 96px));
+  height: min(560px, calc(100dvh - 96px));
+}
+
 .chat-view {
-  flex: 1.2; /* 오른쪽 세로 영역 중 60% 정도 차지 */
+  height: calc(100% - 44px);
   display: flex;
   flex-direction: column;
-  background-color: #BACEE0; /* 카카오톡 배경색 */
   overflow: hidden;
+  background: #bacee0;
 }
 
 .chat-window {
   flex: 1;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   overflow-y: auto;
+  padding: 18px;
+}
+
+.bubble {
+  max-width: 78%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 15px;
+  font-size: 0.9rem;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  border-top-right-radius: 3px;
+  background: #fee500;
+  color: #000;
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  border-top-left-radius: 3px;
+  background: #fff;
+  color: #000;
+}
+
+.input-area {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.input-area input {
+  min-width: 0;
+  flex: 1;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  outline: none;
+  color: #111;
+  background: #fff;
+  font-size: 0.86rem;
+}
+
+.input-area input:focus {
+  border-color: #6c8fb4;
+  box-shadow: 0 0 0 3px rgba(108, 143, 180, 0.18);
+}
+
+.input-area button {
+  flex: 0 0 76px;
+  height: 42px;
+  border: 0;
+  border-radius: 6px;
+  background: #fee500;
+  color: #161616;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quick-actions {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.bubble {
-  max-width: 75%;
-  padding: 10px 15px;
-  border-radius: 15px;
-  font-size: 0.95rem;
-  line-height: 1.4;
+.quick-action {
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  background: rgba(248, 250, 252, 0.94);
+  color: #182235;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease;
 }
 
-.bubble.user {
-  align-self: flex-end;
-  background-color: #FEE500;
-  color: #000;
-  border-top-right-radius: 2px;
+.quick-action.active {
+  background: #fee500;
+  color: #111;
 }
 
-.bubble.assistant {
-  align-self: flex-start;
-  background-color: #ffffff;
-  color: #000;
-  border-top-left-radius: 2px;
-}
-
-.input-area {
-  padding: 15px;
-  background: #ffffff;
-  display: flex;
-  gap: 10px;
-}
-
-.input-area input {
-  flex: 1;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  outline: none;
-}
-
-.input-area button {
-  padding: 0 20px;
-  background-color: #FEE500;
-  border: none;
-  border-radius: 5px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-/* =========================================
-   5. Figure 편집 모드
-   ========================================= */
 .figure-toolbar {
   position: absolute;
   top: 10px;
@@ -250,132 +342,138 @@ body, html {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255,255,255,0.92);
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  max-width: calc(100% - 20px);
+  box-sizing: border-box;
   padding: 5px 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border: 1px solid #d5dbe3;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+}
+
+.btn-figure-edit,
+.btn-export {
+  min-height: 30px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .btn-figure-edit {
   padding: 5px 12px;
-  background: #f5f5f5;
-  border: 1px solid #bbb;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-figure-edit:hover {
-  background: #e8e8e8;
+  border: 1px solid #aeb8c5;
+  background: #f5f7fa;
+  color: #172033;
 }
 
 .btn-figure-edit.active {
+  border-color: #1565c0;
   background: #1565c0;
   color: #fff;
-  border-color: #1565c0;
 }
 
 .figure-edit-hint {
-  font-size: 0.75rem;
-  color: #555;
+  color: #526071;
+  font-size: 0.74rem;
+  white-space: nowrap;
 }
 
 .btn-export {
   padding: 5px 10px;
+  border: 0;
   background: #2e7d32;
   color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.btn-export:hover {
-  background: #1b5e20;
 }
 
 .figure-overlay-label {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(229,57,53,0.85);
+  width: fit-content;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(229, 57, 53, 0.85);
   color: #fff;
   font-size: 10px;
-  padding: 1px 4px;
-  width: fit-content;
-  border-radius: 3px;
 }
 
 .figure-overlay-delete {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 10px;
-  cursor: pointer;
   padding: 0 1px;
+  border: 0;
+  background: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
   line-height: 1;
 }
 
-/* ── Figure 추가 다이얼로그 ── */
 .figure-dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  background: rgba(0, 0, 0, 0.46);
 }
 
 .figure-dialog {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px 28px;
-  width: 380px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  width: min(380px, calc(100vw - 32px));
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 24px 28px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
 }
 
 .figure-dialog h3 {
   margin: 0;
+  color: #111827;
   font-size: 1rem;
 }
 
 .figure-dialog-meta {
   margin: 0;
+  color: #6b7280;
   font-size: 0.75rem;
-  color: #888;
 }
 
 .figure-dialog-label {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  color: #1f2937;
   font-size: 0.85rem;
-  font-weight: bold;
-  color: #333;
+  font-weight: 700;
+}
+
+.optional-label {
+  color: #777;
+  font-weight: 400;
 }
 
 .figure-dialog-label input,
 .figure-dialog-label textarea {
+  box-sizing: border-box;
+  width: 100%;
   padding: 8px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #cbd5e1;
   border-radius: 6px;
+  color: #111;
+  background: #fff;
   font-size: 0.85rem;
   resize: vertical;
-  font-family: inherit;
 }
 
 .figure-dialog-label input:focus,
 .figure-dialog-label textarea:focus {
   outline: none;
   border-color: #1565c0;
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.16);
 }
 
 .figure-dialog-buttons {
@@ -385,22 +483,91 @@ body, html {
 }
 
 .figure-dialog-buttons button {
-  padding: 8px 18px;
+  min-width: 76px;
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
+  background: #f8fafc;
+  color: #111827;
   font-size: 0.85rem;
   cursor: pointer;
 }
 
 .figure-dialog-buttons .btn-confirm {
+  border-color: #1565c0;
   background: #1565c0;
   color: #fff;
-  border-color: #1565c0;
-  font-weight: bold;
+  font-weight: 700;
 }
 
 .figure-dialog-buttons .btn-confirm:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* ── Autorater capture toolbar ─────────────────────────────────── */
+.autorater-capture-toolbar {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: rgba(240, 253, 244, 0.97);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+
+.autorater-capture-hint {
+  color: #15803d;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* ── Autorater chat hint ───────────────────────────────────────── */
+.autorater-chat-hint {
+  padding: 10px 14px;
+  border-top: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+/* ── Disabled input / button state ────────────────────────────── */
+.input-area input:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.input-area button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .pdf-panel {
+    top: 16px;
+    right: 16px;
+    bottom: 92px;
+    left: 16px;
+    width: auto;
+    min-width: 0;
+  }
+
+  .chat-panel {
+    right: 84px;
+    bottom: 16px;
+    width: calc(100vw - 116px);
+    height: min(520px, calc(100dvh - 92px));
+  }
+
+  .quick-actions {
+    right: 16px;
+    bottom: 16px;
+  }
 }
