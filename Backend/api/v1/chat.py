@@ -15,7 +15,7 @@ def chat(request: ChatRequest):
             request.message,
             request.pdf_context,
             request.figure_context,
-            request.figure_image,
+            request.figure_images,
             request.current_video_time,
         )
         return ChatResponse(reply=reply, summary=summary)
@@ -31,7 +31,7 @@ def chat_stream(request: ChatRequest):
                 request.message,
                 request.pdf_context,
                 request.figure_context,
-                request.figure_image,
+                request.figure_images,
                 request.current_video_time,
             ):
                 payload = json.dumps({"delta": delta}, ensure_ascii=False)

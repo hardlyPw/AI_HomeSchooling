@@ -12,7 +12,7 @@ class ChatService:
         user_message: str,
         pdf_context: str | None,
         figure_context: str | None,
-        figure_image: str | None,
+        figure_images: list[str] | None,
     ) -> str:
         parts: list[str] = []
         if pdf_context:
@@ -21,8 +21,10 @@ class ChatService:
             )
         if figure_context:
             parts.append(f'I clicked on a figure in the textbook. {figure_context}')
-        if figure_image:
-            parts.append('The clicked figure is attached as an image.')
+        if figure_images:
+            n = len(figure_images)
+            noun = 'image' if n == 1 else 'images'
+            parts.append(f'The clicked figure is attached as {n} {noun}.')
 
         if parts:
             return "\n\n".join(parts) + f"\n\nMy question: {user_message}"
@@ -39,16 +41,16 @@ class ChatService:
         user_message: str,
         pdf_context: str | None = None,
         figure_context: str | None = None,
-        figure_image: str | None = None,
+        figure_images: list[str] | None = None,
         current_video_time: float | None = None,
     ) -> tuple[str, str]:
-        user_content = self._build_user_content(user_message, pdf_context, figure_context, figure_image)
+        user_content = self._build_user_content(user_message, pdf_context, figure_context, figure_images)
 
         reply, summary = get_teacher_response(
             user_content,
             self.conversation_history,
             current_video_time,
-            figure_image,
+            figure_images,
         )
 
         self._record_turn(user_content, reply)
@@ -59,17 +61,17 @@ class ChatService:
         user_message: str,
         pdf_context: str | None = None,
         figure_context: str | None = None,
-        figure_image: str | None = None,
+        figure_images: list[str] | None = None,
         current_video_time: float | None = None,
     ) -> Iterator[str]:
-        user_content = self._build_user_content(user_message, pdf_context, figure_context, figure_image)
+        user_content = self._build_user_content(user_message, pdf_context, figure_context, figure_images)
 
         collected: list[str] = []
         for delta in get_teacher_response_stream(
             user_content,
             self.conversation_history,
             current_video_time,
-            figure_image,
+            figure_images,
         ):
             collected.append(delta)
             yield delta

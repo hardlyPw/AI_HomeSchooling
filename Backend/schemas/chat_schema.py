@@ -4,7 +4,7 @@ class ChatRequest(BaseModel):
     message: str
     pdf_context: str | None = None
     figure_context: str | None = None
-    figure_image: str | None = None
+    figure_images: list[str] | None = None
     current_video_time: float | None = None
 
 class ChatResponse(BaseModel):

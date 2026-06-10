@@ -290,6 +290,13 @@ textarea {
   background: #d1fae5;
 }
 
+.figure-pending-highlight {
+  border: 2px solid #16a34a;
+  background-color: rgba(22, 163, 74, 0.16);
+  border-radius: 4px;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
 .chat-panel {
   right: 92px;
   bottom: 24px;
@@ -563,6 +570,13 @@ textarea {
   color: #fff;
 }
 
+.btn-figure-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+}
+
 .figure-edit-hint {
   color: #526071;
   font-size: 0.74rem;
@@ -579,23 +593,41 @@ textarea {
 .figure-overlay-label {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   width: fit-content;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(229, 57, 53, 0.85);
+  padding: 3px 4px 3px 8px;
+  border-radius: 4px;
+  background: rgba(229, 57, 53, 0.92);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .figure-overlay-delete {
-  padding: 0 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   border: 0;
-  background: none;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.figure-overlay-delete:hover {
+  background: #fff;
+  color: #b71c1c;
 }
 
 .figure-dialog-overlay {

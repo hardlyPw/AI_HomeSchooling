@@ -113,13 +113,13 @@ def get_teacher_response(
     user_message: str,
     conversation_history: list[dict] | None = None,
     current_video_time: float | None = None,
-    figure_image: str | None = None,
+    figure_images: list[str] | None = None,
 ) -> tuple[str, str]:
     script_context = get_script_so_far(current_video_time)
     print(f"[DEBUG] 영상 시간:        {f'{current_video_time:.1f}s' if current_video_time is not None else '없음'}")
     print(f"[DEBUG] 스크립트 컨텍스트: {'포함 (' + str(len(script_context)) + '자)' if script_context else '없음 (수업 전)'}")
     print(f"[DEBUG] 대화 히스토리:    {len(conversation_history) if conversation_history else 0}개")
-    print(f"[DEBUG] Figure 이미지:    {'첨부 (' + str(len(figure_image)) + '자 base64)' if figure_image else '없음'}")
+    print(f"[DEBUG] Figure 이미지:    {'첨부 ' + str(len(figure_images)) + '장' if figure_images else '없음'}")
 
     system_parts = [TEACHER_PERSONA]
     if script_context:
@@ -133,14 +133,11 @@ def get_teacher_response(
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["text"]})
 
-    if figure_image:
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_message},
-                {"type": "image_url", "image_url": {"url": figure_image}},
-            ],
-        })
+    if figure_images:
+        content_parts: list[dict] = [{"type": "text", "text": user_message}]
+        for img in figure_images:
+            content_parts.append({"type": "image_url", "image_url": {"url": img}})
+        messages.append({"role": "user", "content": content_parts})
     else:
         messages.append({"role": "user", "content": user_message})
 
@@ -161,14 +158,14 @@ def get_teacher_response_stream(
     user_message: str,
     conversation_history: list[dict] | None = None,
     current_video_time: float | None = None,
-    figure_image: str | None = None,
+    figure_images: list[str] | None = None,
 ) -> Iterator[str]:
     """Stream the teacher's reply token-by-token. Yields content deltas only."""
     script_context = get_script_so_far(current_video_time)
     print(f"[DEBUG/stream] 영상 시간:        {f'{current_video_time:.1f}s' if current_video_time is not None else '없음'}")
     print(f"[DEBUG/stream] 스크립트 컨텍스트: {'포함 (' + str(len(script_context)) + '자)' if script_context else '없음 (수업 전)'}")
     print(f"[DEBUG/stream] 대화 히스토리:    {len(conversation_history) if conversation_history else 0}개")
-    print(f"[DEBUG/stream] Figure 이미지:    {'첨부 (' + str(len(figure_image)) + '자 base64)' if figure_image else '없음'}")
+    print(f"[DEBUG/stream] Figure 이미지:    {'첨부 ' + str(len(figure_images)) + '장' if figure_images else '없음'}")
 
     system_parts = [TEACHER_PERSONA]
     if script_context:
@@ -182,14 +179,11 @@ def get_teacher_response_stream(
             role = "user" if msg["role"] == "user" else "assistant"
             messages.append({"role": role, "content": msg["text"]})
 
-    if figure_image:
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": user_message},
-                {"type": "image_url", "image_url": {"url": figure_image}},
-            ],
-        })
+    if figure_images:
+        content_parts: list[dict] = [{"type": "text", "text": user_message}]
+        for img in figure_images:
+            content_parts.append({"type": "image_url", "image_url": {"url": img}})
+        messages.append({"role": "user", "content": content_parts})
     else:
         messages.append({"role": "user", "content": user_message})
 

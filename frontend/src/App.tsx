@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { FastForward, FileText, MessageCircle, Pause, Play, X } from 'lucide-react'
+import { ArrowLeft, FastForward, FileText, MessageCircle, Pause, Play, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -51,10 +51,11 @@ function App() {
     }
     return []
   })
-  const [clickedFigure, setClickedFigure] = useState<Figure | null>(null)
-  const [clickedFigureImage, setClickedFigureImage] = useState<string | null>(null)
+  const [pendingFigureSelection, setPendingFigureSelection] = useState<{ figure: Figure; image: string | null } | null>(null)
+  const [figureSelections, setFigureSelections] = useState<{ figure: Figure; image: string | null }[]>([])
 
   const [editMode, setEditMode] = useState(false)
+  const [addFigureMode, setAddFigureMode] = useState(false)
   const [drawing, setDrawing] = useState<{ pageNum: number; startX: number; startY: number; curX: number; curY: number } | null>(null)
   const [pendingFigure, setPendingFigure] = useState<{ page: number; bbox: { x: number; y: number; x2: number; y2: number } } | null>(null)
   const [editLabel, setEditLabel] = useState('')
@@ -125,7 +126,7 @@ function App() {
       })
       return
     }
-    if (!editMode) return
+    if (!editMode || !addFigureMode) return
     e.preventDefault()
     const rect = e.currentTarget.getBoundingClientRect()
     setDrawing({
@@ -143,7 +144,7 @@ function App() {
       setAutoraterCaptureDraw(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
       return
     }
-    if (!editMode || !drawing || drawing.pageNum !== pageNum) return
+    if (!editMode || !addFigureMode || !drawing || drawing.pageNum !== pageNum) return
     const rect = e.currentTarget.getBoundingClientRect()
     setDrawing(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
   }
@@ -175,7 +176,7 @@ function App() {
       return
     }
 
-    if (!editMode || !drawing || drawing.pageNum !== pageNum) return
+    if (!editMode || !addFigureMode || !drawing || drawing.pageNum !== pageNum) return
     const rect = e.currentTarget.getBoundingClientRect()
     const scale = containerWidth / 595.3
     const curX = e.clientX - rect.left
@@ -238,30 +239,30 @@ function App() {
       ptX >= f.bbox.x && ptX <= f.bbox.x2 &&
       ptY >= f.bbox.y && ptY <= f.bbox.y2
     )
-    if (!found) return
+    if (!found) {
+      setPendingFigureSelection(null)
+      return
+    }
 
-    setClickedFigure(found)
-
+    let image: string | null = null
     const sourceCanvas = e.currentTarget.querySelector('canvas') as HTMLCanvasElement | null
-    if (!sourceCanvas) {
-      setClickedFigureImage(null)
-      return
+    if (sourceCanvas) {
+      const renderScale = sourceCanvas.width / containerWidth
+      const sx = found.bbox.x * scale * renderScale
+      const sy = found.bbox.y * scale * renderScale
+      const sw = (found.bbox.x2 - found.bbox.x) * scale * renderScale
+      const sh = (found.bbox.y2 - found.bbox.y) * scale * renderScale
+      const out = document.createElement('canvas')
+      out.width = Math.max(1, Math.round(sw))
+      out.height = Math.max(1, Math.round(sh))
+      const ctx = out.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height)
+        image = out.toDataURL('image/png')
+      }
     }
-    const renderScale = sourceCanvas.width / containerWidth
-    const sx = found.bbox.x * scale * renderScale
-    const sy = found.bbox.y * scale * renderScale
-    const sw = (found.bbox.x2 - found.bbox.x) * scale * renderScale
-    const sh = (found.bbox.y2 - found.bbox.y) * scale * renderScale
-    const out = document.createElement('canvas')
-    out.width = Math.max(1, Math.round(sw))
-    out.height = Math.max(1, Math.round(sh))
-    const ctx = out.getContext('2d')
-    if (!ctx) {
-      setClickedFigureImage(null)
-      return
-    }
-    ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height)
-    setClickedFigureImage(out.toDataURL('image/png'))
+
+    setPendingFigureSelection({ figure: found, image })
   }
 
   const handleMouseUp = () => {
@@ -274,16 +275,25 @@ function App() {
     setPendingPdfSelection(selection.toString().trim())
   }
 
-  const confirmPdfSelection = () => {
+  const confirmSelection = () => {
     const text = pendingPdfSelection.trim()
-    if (!text) return
-    setPdfSelections(prev => [...prev, text])
-    setPendingPdfSelection('')
-    window.getSelection()?.removeAllRanges()
+    if (text) {
+      setPdfSelections(prev => [...prev, text])
+      setPendingPdfSelection('')
+      window.getSelection()?.removeAllRanges()
+    }
+    if (pendingFigureSelection) {
+      setFigureSelections(prev => [...prev, pendingFigureSelection])
+      setPendingFigureSelection(null)
+    }
   }
 
   const removePdfSelectionAt = (idx: number) => {
     setPdfSelections(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const removeFigureSelectionAt = (idx: number) => {
+    setFigureSelections(prev => prev.filter((_, i) => i !== idx))
   }
 
   const startAutoraterSession = async (imageB64: string) => {
@@ -354,7 +364,7 @@ function App() {
       await sendAutoraterMessage()
       return
     }
-    const hasContext = pdfSelections.length > 0 || clickedFigure
+    const hasContext = pdfSelections.length > 0 || figureSelections.length > 0
     const messageText = input.trim() || (hasContext ? 'Explain this.' : '')
     if (!messageText) return
 
@@ -362,16 +372,23 @@ function App() {
     setMessages(prev => [...prev, { role: 'user', text: messageText }])
     setInput('')
 
-    const body: { message: string; pdf_context?: string; figure_context?: string; figure_image?: string; current_video_time?: number } = { message: messageText }
+    const body: { message: string; pdf_context?: string; figure_context?: string; figure_images?: string[]; current_video_time?: number } = { message: messageText }
     if (pdfSelections.length > 0) {
       body.pdf_context = pdfSelections
         .map((s, i) => `Passage ${i + 1}:\n"""\n${s}\n"""`)
         .join('\n\n')
     }
-    if (clickedFigure) {
-      const desc = clickedFigure.description ? clickedFigure.description : '(no description)'
-      body.figure_context = `Label: ${clickedFigure.label}. Description: ${desc}`
-      if (clickedFigureImage) body.figure_image = clickedFigureImage
+    if (figureSelections.length > 0) {
+      body.figure_context = figureSelections
+        .map((s, i) => {
+          const desc = s.figure.description ? s.figure.description : '(no description)'
+          return `Figure ${i + 1} — Label: ${s.figure.label}. Description: ${desc}`
+        })
+        .join('\n\n')
+      const images = figureSelections
+        .map(s => s.image)
+        .filter((img): img is string => !!img)
+      if (images.length > 0) body.figure_images = images
     }
     if (videoRef.current && videoRef.current.currentTime > 0) {
       body.current_video_time = videoRef.current.currentTime
@@ -379,8 +396,8 @@ function App() {
 
     setPdfSelections([])
     setPendingPdfSelection('')
-    setClickedFigure(null)
-    setClickedFigureImage(null)
+    setFigureSelections([])
+    setPendingFigureSelection(null)
     window.getSelection()?.removeAllRanges()
 
     const msgId = ++messageIdRef.current
@@ -523,11 +540,11 @@ function App() {
             </button>
           </div>
 
-          {!autoraterMode && pendingPdfSelection && (
+          {!autoraterMode && (pendingPdfSelection || pendingFigureSelection) && (
             <button
               className="btn-pdf-select"
-              onClick={confirmPdfSelection}
-              title="Add this passage to the chat prompt"
+              onClick={confirmSelection}
+              title="Add this selection to the chat prompt"
             >
               + Select
             </button>
@@ -542,15 +559,32 @@ function App() {
               </div>
             ) : (
               <div className="figure-toolbar">
-                <button
-                  className={`btn-figure-edit ${editMode ? 'active' : ''}`}
-                  onClick={() => { setEditMode(prev => !prev); setDrawing(null); setPendingFigure(null) }}
-                >
-                  {editMode ? 'Editing' : '+ Add Figure'}
-                </button>
-                {editMode && (
+                {!editMode ? (
+                  <button
+                    className="btn-figure-edit"
+                    onClick={() => setEditMode(true)}
+                  >
+                    Edit Figures
+                  </button>
+                ) : (
                   <>
-                    <span className="figure-edit-hint">Drag to draw a box</span>
+                    <button
+                      className="btn-figure-edit btn-figure-back"
+                      onClick={() => { setEditMode(false); setAddFigureMode(false); setDrawing(null); setPendingFigure(null) }}
+                      title="Exit edit mode"
+                      aria-label="Exit edit mode"
+                    >
+                      <ArrowLeft size={16} />
+                    </button>
+                    <button
+                      className={`btn-figure-edit ${addFigureMode ? 'active' : ''}`}
+                      onClick={() => { setAddFigureMode(prev => !prev); setDrawing(null) }}
+                    >
+                      {addFigureMode ? 'Adding…' : '+ Add Figure'}
+                    </button>
+                    {addFigureMode && (
+                      <span className="figure-edit-hint">Drag to draw a box</span>
+                    )}
                     <button className="btn-export" onClick={exportFigures}>Export JSON</button>
                   </>
                 )}
@@ -571,8 +605,8 @@ function App() {
                       key={pageNum}
                       style={{
                         position: 'relative',
-                        cursor: editMode || (autoraterMode && !autoraterStarted) ? 'crosshair' : 'default',
-                        userSelect: editMode || (autoraterMode && !autoraterStarted) ? 'none' : 'auto',
+                        cursor: (editMode && addFigureMode) || (autoraterMode && !autoraterStarted) ? 'crosshair' : 'default',
+                        userSelect: (editMode && addFigureMode) || (autoraterMode && !autoraterStarted) ? 'none' : 'auto',
                       }}
                       onClick={e => handlePageClick(e, pageNum)}
                       onMouseDown={e => handleDrawMouseDown(e, pageNum)}
@@ -598,6 +632,7 @@ function App() {
                             border: '2px solid #e53935',
                             backgroundColor: 'rgba(229,57,53,0.08)',
                             boxSizing: 'border-box',
+                            zIndex: 5,
                           }}
                         >
                           <div className="figure-overlay-label">
@@ -605,12 +640,30 @@ function App() {
                             <button
                               className="figure-overlay-delete"
                               onClick={e => { e.stopPropagation(); deleteFigure(f.id) }}
+                              onMouseDown={e => e.stopPropagation()}
+                              title="Delete figure"
+                              aria-label="Delete figure"
                             >
-                              x
+                              ×
                             </button>
                           </div>
                         </div>
                       ))}
+
+                      {!editMode && !autoraterMode && pendingFigureSelection && pendingFigureSelection.figure.page === pageNum && (
+                        <div
+                          className="figure-pending-highlight"
+                          style={{
+                            position: 'absolute',
+                            left: pendingFigureSelection.figure.bbox.x * scale,
+                            top: pendingFigureSelection.figure.bbox.y * scale,
+                            width: (pendingFigureSelection.figure.bbox.x2 - pendingFigureSelection.figure.bbox.x) * scale,
+                            height: (pendingFigureSelection.figure.bbox.y2 - pendingFigureSelection.figure.bbox.y) * scale,
+                            pointerEvents: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      )}
 
                       {editMode && drawing && drawing.pageNum === pageNum && (
                         <div
@@ -730,24 +783,35 @@ function App() {
               </div>
             )}
 
-            {!autoraterMode && clickedFigure && (
-              <div className="pdf-selection-bar">
-                <span>{clickedFigure.label} clicked</span>
-                <button onClick={() => setClickedFigure(null)}>x</button>
-              </div>
-            )}
-
-            {!autoraterMode && pdfSelections.length > 0 && (
+            {!autoraterMode && (pdfSelections.length > 0 || figureSelections.length > 0) && (
               <div className="pdf-selection-list">
                 {pdfSelections.map((sel, i) => (
-                  <div key={i} className="pdf-selection-chip" title={sel}>
+                  <div key={`p-${i}`} className="pdf-selection-chip" title={sel}>
                     <span className="pdf-selection-chip-label">
-                      #{i + 1} {sel.length > 40 ? sel.slice(0, 40) + '…' : sel}
+                      ¶{i + 1} {sel.length > 40 ? sel.slice(0, 40) + '…' : sel}
                     </span>
                     <button
                       className="pdf-selection-chip-remove"
                       onClick={() => removePdfSelectionAt(i)}
                       aria-label="Remove passage"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {figureSelections.map((sel, i) => (
+                  <div
+                    key={`f-${i}`}
+                    className="pdf-selection-chip figure-selection-chip"
+                    title={sel.figure.description || sel.figure.label}
+                  >
+                    <span className="pdf-selection-chip-label">
+                      Fig · {sel.figure.label}
+                    </span>
+                    <button
+                      className="pdf-selection-chip-remove"
+                      onClick={() => removeFigureSelectionAt(i)}
+                      aria-label="Remove figure"
                     >
                       ×
                     </button>
