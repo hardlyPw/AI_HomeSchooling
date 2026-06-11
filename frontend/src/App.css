@@ -49,6 +49,11 @@ textarea {
   background: #000;
 }
 
+.character-video:focus,
+.character-video:focus-visible {
+  outline: none;
+}
+
 .lesson-progress {
   position: absolute;
   top: 18px;
@@ -73,7 +78,6 @@ textarea {
   gap: 10px;
 }
 
-.btn-play,
 .btn-question,
 .quick-action,
 .panel-close {
@@ -83,7 +87,6 @@ textarea {
   cursor: pointer;
 }
 
-.btn-play,
 .btn-question {
   width: 44px;
   height: 44px;
@@ -91,12 +94,6 @@ textarea {
   border-radius: 50%;
   color: #141414;
   transition: transform 0.16s ease, background-color 0.16s ease, opacity 0.16s ease;
-}
-
-.btn-play {
-  border: 0;
-  background: #fee500;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
 }
 
 .btn-question {
@@ -110,7 +107,6 @@ textarea {
   color: #15803d;
 }
 
-.btn-play:hover,
 .btn-question:hover:not(:disabled),
 .quick-action:hover,
 .panel-close:hover {
@@ -594,7 +590,7 @@ textarea {
 .quick-actions {
   position: absolute;
   right: 24px;
-  bottom: 24px;
+  bottom: 86px;
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -682,7 +678,7 @@ textarea {
 
   .quick-actions {
     right: 16px;
-    bottom: 16px;
+    bottom: 78px;
   }
 }
 

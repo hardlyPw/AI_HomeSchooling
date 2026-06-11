@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { FastForward, FileText, MessageCircle, Pause, Play, Users, X } from 'lucide-react'
+import { FastForward, FileText, MessageCircle, Users, X } from 'lucide-react'
 import FriendView from './FriendView'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -198,6 +198,25 @@ function App() {
       .then(r => r.json())
       .then(setFigures)
       .catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    const handleVideoShortcuts = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, [contenteditable="true"]')) return
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+
+      const video = videoRef.current
+      if (!video) return
+
+      e.preventDefault()
+      const delta = e.key === 'ArrowRight' ? 5 : -5
+      const duration = Number.isFinite(video.duration) ? video.duration : Number.POSITIVE_INFINITY
+      video.currentTime = Math.min(Math.max(video.currentTime + delta, 0), duration)
+    }
+
+    window.addEventListener('keydown', handleVideoShortcuts)
+    return () => window.removeEventListener('keydown', handleVideoShortcuts)
   }, [])
 
   const handleDrawMouseDown = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
@@ -523,21 +542,6 @@ function App() {
     }
   }
 
-  const startLesson = () => {
-    videoRef.current?.play()
-    setLessonState('playing')
-  }
-
-  const pauseLesson = () => {
-    videoRef.current?.pause()
-    setLessonState('paused')
-  }
-
-  const resumeLesson = () => {
-    videoRef.current?.play()
-    setLessonState('playing')
-  }
-
   const showTextbook = () => {
     setHasOpenedPdf(true)
     setShowPdf(true)
@@ -571,17 +575,6 @@ function App() {
     }
   }
 
-  const handlePlayBtn = () => {
-    if (lessonState === 'idle') startLesson()
-    else if (lessonState === 'playing') pauseLesson()
-    else if (lessonState === 'paused' || lessonState === 'question') resumeLesson()
-  }
-
-  const playBtnIcon = () => {
-    if (lessonState === 'playing') return <Pause size={20} strokeWidth={2.6} />
-    return <Play size={20} strokeWidth={2.6} fill="currentColor" />
-  }
-
   if (appMode === 'friend') {
     return (
       <div className="main-layout">
@@ -597,6 +590,10 @@ function App() {
           ref={videoRef}
           src="/assets/video.mp4"
           className="character-video"
+          controls
+          preload="metadata"
+          onPlay={() => setLessonState('playing')}
+          onPause={() => setLessonState('paused')}
           onEnded={() => setLessonState('paused')}
           playsInline
         />
@@ -606,9 +603,6 @@ function App() {
         )}
 
         <div className="lesson-buttons" aria-label="Lesson controls">
-          <button className="btn-play" onClick={handlePlayBtn} aria-label={lessonState === 'playing' ? 'Pause lesson' : 'Play lesson'}>
-            {playBtnIcon()}
-          </button>
           <button
             className={`btn-question ${autoraterMode ? 'active' : ''}`}
             onClick={enterAutoraterMode}
@@ -733,6 +727,13 @@ function App() {
 
           <div className="chat-view">
             <div className="chat-window" ref={scrollRef}>
+              {!autoraterMode && (
+                <div className="bubble assistant">
+                  <div className="markdown-body">
+                    Ask me what you don't know!
+                  </div>
+                </div>
+              )}
               {messages.map((msg, idx) => (
                 <div key={idx} className={`bubble ${msg.role}`}>
                   {msg.role === 'assistant' ? (
