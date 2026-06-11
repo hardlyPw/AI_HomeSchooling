@@ -1134,6 +1134,28 @@ textarea {
   color: #b3bcc8;
 }
 
+.friend-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.friend-row.user {
+  justify-content: flex-end;
+}
+
+.friend-row.assistant {
+  justify-content: flex-start;
+}
+
+.friend-bubble-time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding-bottom: 3px;
+}
+
 .friend-bubble {
   max-width: 76%;
   padding: 9px 13px;

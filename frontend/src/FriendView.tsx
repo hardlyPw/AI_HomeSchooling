@@ -7,6 +7,11 @@ interface FriendMessage {
   role: 'user' | 'assistant'
   text: string
   id: number
+  timestamp: string
+}
+
+function nowHHMM(): string {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 const EXPRESSION_SRC: Record<Expression, string> = {
@@ -79,7 +84,7 @@ export default function FriendView({ onExit }: Props) {
     setIsStreaming(true)
     setIsTyping(true)
 
-    const userMsg: FriendMessage = { role: 'user', text, id: ++idRef.current }
+    const userMsg: FriendMessage = { role: 'user', text, id: ++idRef.current, timestamp: nowHHMM() }
     setMessages(prev => [...prev, userMsg])
 
     const assistantId = ++idRef.current
@@ -115,7 +120,7 @@ export default function FriendView({ onExit }: Props) {
                 if (!assistantStarted) {
                   assistantStarted = true
                   setIsTyping(false)
-                  setMessages(prev => [...prev, { role: 'assistant', text: '', id: assistantId }])
+                  setMessages(prev => [...prev, { role: 'assistant', text: '', id: assistantId, timestamp: nowHHMM() }])
                 }
                 setMessages(prev => prev.map(m =>
                   m.id === assistantId ? { ...m, text: m.text + obj.delta } : m
@@ -127,6 +132,7 @@ export default function FriendView({ onExit }: Props) {
                   role: 'assistant',
                   text: `⚠️ ${obj.error}`,
                   id: ++idRef.current,
+                  timestamp: nowHHMM(),
                 }])
               }
             } catch { /* ignore */ }
@@ -139,6 +145,7 @@ export default function FriendView({ onExit }: Props) {
         role: 'assistant',
         text: '⚠️ Connection failed.',
         id: ++idRef.current,
+        timestamp: nowHHMM(),
       }])
     } finally {
       setIsStreaming(false)
@@ -197,15 +204,13 @@ export default function FriendView({ onExit }: Props) {
         </header>
 
         <div className="friend-chat-window" ref={scrollRef}>
-          {messages.length === 0 && (
-            <div className="friend-empty">
-              <p>Say hi to Jiho</p>
-              <p className="friend-empty-sub">just text like you would on kakaotalk</p>
-            </div>
-          )}
           {messages.map(m => (
-            <div key={m.id} className={`friend-bubble ${m.role}`}>
-              {m.text || (m.role === 'assistant' && isTyping ? '…' : '')}
+            <div key={m.id} className={`friend-row ${m.role}`}>
+              {m.role === 'user' && <span className="friend-bubble-time">{m.timestamp}</span>}
+              <div className={`friend-bubble ${m.role}`}>
+                {m.text || (m.role === 'assistant' && isTyping ? '…' : '')}
+              </div>
+              {m.role === 'assistant' && <span className="friend-bubble-time">{m.timestamp}</span>}
             </div>
           ))}
           {isTyping && (
