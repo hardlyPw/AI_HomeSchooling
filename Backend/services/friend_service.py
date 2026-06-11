@@ -13,7 +13,9 @@ to per-session state.
 from __future__ import annotations
 
 import os
+import random
 import sys
+import time
 from pathlib import Path
 from typing import Iterator
 
@@ -42,6 +44,26 @@ NEGATIVE_HINTS = (
     "kys", "fuck you", "fk u", "trash",
 )
 
+DELAY_TURN_THRESHOLD = 50
+EARLY_AWAY_PROBABILITY = 0.01
+LATE_AWAY_PROBABILITY = 0.10
+ALWAYS_COOLDOWN_PROBABILITY = 0.001
+COOLDOWN_SECONDS = 5 * 60
+COOLDOWN_REASONS = (
+    "게임 한 판 하느라",
+    "밥 먹느라",
+    "유튜브 보느라",
+    "잠깐 씻느라",
+    "폰 충전기 찾느라",
+)
+
+
+class AwayDecision:
+    def __init__(self, mode: str = "normal", wait_seconds: int = 0, reason: str = "") -> None:
+        self.mode = mode
+        self.wait_seconds = wait_seconds
+        self.reason = reason
+
 
 class FriendService:
     def __init__(self) -> None:
@@ -49,6 +71,10 @@ class FriendService:
         af.conversation_history.clear()
         af.affinity = 70
         af.consecutive_negative = 0
+        af._cooldown_until = None
+        af._cooldown_reason = ""
+        self._away_count = 0
+        self._force_next_cooldown = False
 
     # ── State exposed to api/v1/friend.py ─────────────────────────────
     @property
@@ -63,6 +89,16 @@ class FriendService:
         af.conversation_history.clear()
         af.affinity = 70
         af.consecutive_negative = 0
+        af._cooldown_until = None
+        af._cooldown_reason = ""
+        self._away_count = 0
+        self._force_next_cooldown = False
+        drain_pending = getattr(af, "_drain_pending_chunk", None)
+        if callable(drain_pending):
+            drain_pending()
+
+    def force_next_cooldown(self) -> None:
+        self._force_next_cooldown = True
 
     # ── Affinity update (keyword stub) ────────────────────────────────
     def _affinity_delta(self, user_text: str) -> int:
@@ -88,10 +124,47 @@ class FriendService:
         af.affinity = max(0, min(100, af.affinity + delta))
         return old
 
+    def _pick_away_decision(self) -> AwayDecision:
+        if self._force_next_cooldown:
+            self._force_next_cooldown = False
+            return self._begin_cooldown()
+
+        if random.random() < ALWAYS_COOLDOWN_PROBABILITY:
+            return self._begin_cooldown()
+
+        turn_count = len(af.conversation_history) // 2
+        away_probability = (
+            EARLY_AWAY_PROBABILITY
+            if turn_count < DELAY_TURN_THRESHOLD
+            else LATE_AWAY_PROBABILITY
+        )
+        if random.random() >= away_probability:
+            return AwayDecision()
+
+        self._away_count += 1
+        if self._away_count <= 3:
+            return AwayDecision(mode="delayed", wait_seconds=30)
+        if self._away_count == 4:
+            return AwayDecision(mode="delayed", wait_seconds=60)
+        return self._begin_cooldown()
+
+    def _begin_cooldown(self) -> AwayDecision:
+        self._away_count += 1
+        return AwayDecision(
+            mode="cooldown",
+            wait_seconds=COOLDOWN_SECONDS,
+            reason=random.choice(COOLDOWN_REASONS),
+        )
+
     # ── Streaming reply ──────────────────────────────────────────────
     def stream_reply(self, user_message: str) -> Iterator[dict]:
         """Yields {"delta": str} chunks, then affinity, then done."""
         old_affinity = self._apply_delta(self._affinity_delta(user_message))
+        away = self._pick_away_decision()
+
+        if away.mode in {"delayed", "cooldown"}:
+            yield {"status": away.mode, "wait_seconds": away.wait_seconds}
+            time.sleep(away.wait_seconds)
 
         # Long-term RAG retrieval (mirrors AI_Friend.py main loop)
         top_k = 1 if af.affinity <= 40 else 5
@@ -118,6 +191,11 @@ class FriendService:
         )
 
         collected: list[str] = []
+        if away.mode == "cooldown":
+            prefix = f"나 {away.reason} 잠깐 갔다 왔어. "
+            collected.append(prefix)
+            yield {"delta": prefix}
+
         for chunk in stream:
             if not chunk.choices:
                 continue

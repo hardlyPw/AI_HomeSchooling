@@ -1086,8 +1086,26 @@ textarea {
 }
 
 .friend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.friend-status.online {
   color: #16a34a;
+}
+
+.friend-status.offline {
+  color: #8a94a3;
+}
+
+.friend-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .friend-debug-toggle {
@@ -1107,6 +1125,11 @@ textarea {
   background: #1e293b;
   border-color: #1e293b;
   color: #fff;
+}
+
+.friend-debug-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .friend-chat-window {
