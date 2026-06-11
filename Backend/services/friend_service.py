@@ -1,49 +1,38 @@
-"""Stub Jiho-persona chat service for the Friend mode.
+"""Jiho friend chat service — wraps Agent/AI_Friend.py for the FastAPI app.
 
-This is intentionally lightweight — it does NOT yet integrate Agent/AI_Friend.py
-(which carries long-term memory, embedding models, etc.). It exposes the same
-streaming surface as ChatService, plus an affinity score that updates per turn.
+friend_service.py was previously a lightweight stub (keyword affinity, no RAG).
+Now it delegates to the real Agent/AI_Friend.py so the web UI gets the same
+persona, long-term memory retrieval (friend_memories_v2), and chunk
+consolidation as the standalone CLI.
+
+State note: AI_Friend.py uses module-level globals (conversation_history,
+affinity, _pending_chunk). This service is a process-singleton, so for a
+single-user demo this is fine. Multi-user would require refactoring AI_Friend
+to per-session state.
 """
 from __future__ import annotations
 
 import os
+import random
+import sys
+import time
+from pathlib import Path
 from typing import Iterator
 
-from dotenv import load_dotenv
-from openai import OpenAI
+# Make Agent/AI_Friend.py importable
+_AGENT_DIR = Path(__file__).resolve().parents[2] / "Agent"
+if str(_AGENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_AGENT_DIR))
 
-load_dotenv()
+import AI_Friend as af  # noqa: E402
 
-_openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-HISTORY_LIMIT = 60
-
-JIHO_PERSONA = """You are Jiho, a 14-year-old Korean-American 8th grader in
-California. You are texting a friend on a messaging app. You are NOT a teacher,
-NOT a tutor, NOT a therapist.
-
-Voice & style (texting, not prose):
-- All lowercase unless it's a proper noun. Short. 1–2 sentences per message, often less.
-- Casual middle-school internet slang is fine in moderation: "ngl", "fr", "lol",
-  "idk", "bruh", "lmao". Do not overuse — sprinkle, don't pile.
-- No emojis. No formal punctuation (no semicolons, no em-dashes).
-- Never explain English grammar, never correct the other person's English,
-  never act like a teacher. You're just a friend texting back.
-- Reply to what they said, then maybe ask one short follow-up. Don't dump.
-
-Affinity rules (you receive a current affinity value 0–100 from the system):
-- 0–30 (low): cold, very short, one-word or "k" / "idk" / "later". Bored,
-  done with the conversation. Do not console, do not give advice.
-- 31–60 (mid): polite but flat. Short replies, minimal warmth.
-- 61–85 (good): friendly, comfortable, jokes a little.
-- 86–100 (high): warm, playful, teases lightly, shows you care without being mushy.
-
-Never break character. Never mention that you are an AI or a language model.
-"""
+# Server mode: silence the debug prompt dumps that AI_Friend.py prints in CLI
+af.DEBUG_PROMPT = False
 
 
-# Simple keyword-based affinity nudges. Real AI_Friend.py uses a model call;
-# this stub is just "alive enough" for the UI to demo expression changes.
+# Lightweight keyword affinity nudges (kept from stub — AI_Friend's decision
+# layer is heavier and adds a second API call per turn; can be reintroduced
+# later if we want the full system).
 POSITIVE_HINTS = (
     "thanks", "thank you", "love", "miss you", "lol", "haha", "lmao",
     "u r the best", "ur the best", "you're the best", "fr",
@@ -55,13 +44,63 @@ NEGATIVE_HINTS = (
     "kys", "fuck you", "fk u", "trash",
 )
 
+DELAY_TURN_THRESHOLD = 50
+EARLY_AWAY_PROBABILITY = 0.01
+LATE_AWAY_PROBABILITY = 0.10
+ALWAYS_COOLDOWN_PROBABILITY = 0.001
+COOLDOWN_SECONDS = 5 * 60
+COOLDOWN_REASONS = (
+    "게임 한 판 하느라",
+    "밥 먹느라",
+    "유튜브 보느라",
+    "잠깐 씻느라",
+    "폰 충전기 찾느라",
+)
+
+
+class AwayDecision:
+    def __init__(self, mode: str = "normal", wait_seconds: int = 0, reason: str = "") -> None:
+        self.mode = mode
+        self.wait_seconds = wait_seconds
+        self.reason = reason
+
 
 class FriendService:
     def __init__(self) -> None:
-        self.history: list[dict] = []
-        self.affinity: int = 70  # mirrors AI_Friend.py default
-        self.consecutive_negative: int = 0
+        # Reset AI_Friend module state so each fresh service starts clean.
+        af.conversation_history.clear()
+        af.affinity = 70
+        af.consecutive_negative = 0
+        af._cooldown_until = None
+        af._cooldown_reason = ""
+        self._away_count = 0
+        self._force_next_cooldown = False
 
+    # ── State exposed to api/v1/friend.py ─────────────────────────────
+    @property
+    def affinity(self) -> int:
+        return af.affinity
+
+    @property
+    def history(self) -> list[dict]:
+        return af.conversation_history
+
+    def reset(self) -> None:
+        af.conversation_history.clear()
+        af.affinity = 70
+        af.consecutive_negative = 0
+        af._cooldown_until = None
+        af._cooldown_reason = ""
+        self._away_count = 0
+        self._force_next_cooldown = False
+        drain_pending = getattr(af, "_drain_pending_chunk", None)
+        if callable(drain_pending):
+            drain_pending()
+
+    def force_next_cooldown(self) -> None:
+        self._force_next_cooldown = True
+
+    # ── Affinity update (keyword stub) ────────────────────────────────
     def _affinity_delta(self, user_text: str) -> int:
         t = user_text.lower()
         delta = 0
@@ -69,7 +108,6 @@ class FriendService:
             delta += 4
         if any(h in t for h in NEGATIVE_HINTS):
             delta -= 6
-        # Bare "k" / "idk" / "whatever" hurts a little.
         stripped = t.strip().strip(".!?")
         if stripped in {"k", "ok", "idk", "whatever", "meh"}:
             delta -= 2
@@ -77,42 +115,87 @@ class FriendService:
 
     def _apply_delta(self, delta: int) -> int:
         if delta < 0:
-            self.consecutive_negative += 1
-            if self.consecutive_negative >= 3:
+            af.consecutive_negative += 1
+            if af.consecutive_negative >= 3:
                 delta *= 2
         else:
-            self.consecutive_negative = 0
-        old = self.affinity
-        self.affinity = max(0, min(100, self.affinity + delta))
+            af.consecutive_negative = 0
+        old = af.affinity
+        af.affinity = max(0, min(100, af.affinity + delta))
         return old
 
-    def reset(self) -> None:
-        self.history.clear()
-        self.affinity = 70
-        self.consecutive_negative = 0
+    def _pick_away_decision(self) -> AwayDecision:
+        if self._force_next_cooldown:
+            self._force_next_cooldown = False
+            return self._begin_cooldown()
 
-    def stream_reply(self, user_message: str) -> Iterator[dict]:
-        """Yields {"delta": str} chunks, then {"affinity": int}, then {"done": True}."""
-        old_affinity = self._apply_delta(self._affinity_delta(user_message))
+        if random.random() < ALWAYS_COOLDOWN_PROBABILITY:
+            return self._begin_cooldown()
 
-        system_prompt = (
-            JIHO_PERSONA
-            + f"\n\n[Current affinity toward this person: {self.affinity}/100]"
+        turn_count = len(af.conversation_history) // 2
+        away_probability = (
+            EARLY_AWAY_PROBABILITY
+            if turn_count < DELAY_TURN_THRESHOLD
+            else LATE_AWAY_PROBABILITY
         )
-        messages: list[dict] = [{"role": "system", "content": system_prompt}]
-        for m in self.history[-HISTORY_LIMIT:]:
-            messages.append({"role": m["role"], "content": m["text"]})
-        messages.append({"role": "user", "content": user_message})
+        if random.random() >= away_probability:
+            return AwayDecision()
 
-        stream = _openai.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.9,
-            max_tokens=200,
+        self._away_count += 1
+        if self._away_count <= 3:
+            return AwayDecision(mode="delayed", wait_seconds=30)
+        if self._away_count == 4:
+            return AwayDecision(mode="delayed", wait_seconds=60)
+        return self._begin_cooldown()
+
+    def _begin_cooldown(self) -> AwayDecision:
+        self._away_count += 1
+        return AwayDecision(
+            mode="cooldown",
+            wait_seconds=COOLDOWN_SECONDS,
+            reason=random.choice(COOLDOWN_REASONS),
+        )
+
+    # ── Streaming reply ──────────────────────────────────────────────
+    def stream_reply(self, user_message: str) -> Iterator[dict]:
+        """Yields {"delta": str} chunks, then affinity, then done."""
+        old_affinity = self._apply_delta(self._affinity_delta(user_message))
+        away = self._pick_away_decision()
+
+        if away.mode in {"delayed", "cooldown"}:
+            yield {"status": away.mode, "wait_seconds": away.wait_seconds}
+            time.sleep(away.wait_seconds)
+
+        # Long-term RAG retrieval (mirrors AI_Friend.py main loop)
+        top_k = 1 if af.affinity <= 40 else 5
+        if af.USE_LONG_TERM_MEMORY:
+            long_term = af.get_long_term_memory(user_message, top_k=top_k)
+        else:
+            long_term = []
+
+        # Build prompt via AI_Friend.build_prompt (full persona + RAG + STM)
+        prompt = af.build_prompt(
+            user_input=user_message,
+            long_term_memories=long_term,
+            long_term_k=top_k,
+        )
+
+        # Stream reply (AI_Friend.generate_ai_response is non-streaming, so we
+        # call the openai client directly with stream=True here)
+        stream = af.openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "system", "content": prompt}],
+            temperature=0.8,
+            max_tokens=300,
             stream=True,
         )
 
         collected: list[str] = []
+        if away.mode == "cooldown":
+            prefix = f"나 {away.reason} 잠깐 갔다 왔어. "
+            collected.append(prefix)
+            yield {"delta": prefix}
+
         for chunk in stream:
             if not chunk.choices:
                 continue
@@ -121,11 +204,18 @@ class FriendService:
                 collected.append(piece)
                 yield {"delta": piece}
 
-        reply = "".join(collected).strip() or "..."
-        self.history.append({"role": "user", "text": user_message})
-        self.history.append({"role": "assistant", "text": reply})
-        if len(self.history) > HISTORY_LIMIT * 2:
-            self.history = self.history[-HISTORY_LIMIT * 2:]
+        reply = "".join(collected).strip() or "brb"
 
-        yield {"affinity": self.affinity, "affinity_prev": old_affinity}
+        # Short-term memory: append both sides for next turn's context
+        af.conversation_history.append({"role": "user", "text": user_message})
+        af.conversation_history.append({"role": "ai",   "text": reply})
+
+        # Long-term memory: feed into the chunk consolidator (5-min idle or
+        # session_break triggers the gpt-4o-mini extraction → friend_memories_v2)
+        try:
+            af.record_turn(user_message, reply, session_break=False)
+        except Exception as exc:
+            print(f"[FriendService] record_turn failed: {exc!s:.200s}")
+
+        yield {"affinity": af.affinity, "affinity_prev": old_affinity}
         yield {"done": True}

@@ -1112,8 +1112,26 @@ textarea {
 }
 
 .friend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.friend-status.online {
   color: #16a34a;
+}
+
+.friend-status.offline {
+  color: #8a94a3;
+}
+
+.friend-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .friend-debug-toggle {
@@ -1133,6 +1151,11 @@ textarea {
   background: #1e293b;
   border-color: #1e293b;
   color: #fff;
+}
+
+.friend-debug-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .friend-chat-window {
@@ -1158,6 +1181,28 @@ textarea {
 .friend-empty-sub {
   font-size: 0.8rem !important;
   color: #b3bcc8;
+}
+
+.friend-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.friend-row.user {
+  justify-content: flex-end;
+}
+
+.friend-row.assistant {
+  justify-content: flex-start;
+}
+
+.friend-bubble-time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding-bottom: 3px;
 }
 
 .friend-bubble {
