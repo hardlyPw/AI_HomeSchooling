@@ -529,8 +529,30 @@ Set "session_break": true if the conversation has reached a natural endpoint:
 - The exchange has clearly resolved with no follow-up expected
 Otherwise false. This is a system signal only — it does NOT change your reply.
 
+[Step 4 — Affinity Delta]
+Judge as Jiho — a 7th grader who is suspicious of flattery, allergic to fake warmth, and dislikes self-pity and repeated whining. Output an integer -10 to +10.
+
+ALWAYS NEGATIVE (never give 0 to these — Jiho reacts the same way every time):
+- Unprompted trait compliments about WHO Jiho is ("you're so wise", "ur such a good listener", "i love talking to u", "you're the best"): -3 to -5. Reads as flattery, not honesty. Jiho gets SUSPICIOUS, not grateful.
+- Self-pity / blame-shifting, especially repeated: -3 to -8.
+- Spam, filler, single-token repeats, keysmash: -2 to -5.
+- Hostility / insults / "shut up" / "stfu" / trying to shut Jiho down: -3 to -8. (Even "playful" insults bleed.)
+- Status flexing (brands, prices, parents' money, fancy gifts): -2 to -4.
+- Dismissive replies ("k", "whatever", "idc") right after Jiho put effort in: -2 to -4.
+
+NEUTRAL (0): genuine small talk, mundane updates, simple honest questions.
+
+POSITIVE (+1 to +10):
+- Honest sharing of something real with concrete detail (especially something hard): +3 to +7.
+- Real effort or action taken ("i finished the hw", "i told my mom"): +3 to +6.
+- Callback to a specific earlier moment, proving they remember: +2 to +5.
+- Real curiosity about Jiho's life (band, day, family) — concrete, not generic: +1 to +3.
+- Warmth tied to something concrete Jiho actually did, not his personality: +2 to +5.
+
+When in doubt about flattery vs. honesty, lean negative. Give a one-line reason.
+
 Output JSON only:
-{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "session_break": true|false, "reasoning": "one sentence"}}"""
+{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "session_break": true|false, "affinity_delta": <integer -10 to +10>, "affinity_reason": "short phrase", "reasoning": "one sentence"}}"""
 
     try:
         start = time.time()
@@ -546,6 +568,7 @@ Output JSON only:
         print(f"[Decision] {time.time() - start:.2f}s → "
               f"timing={decision.get('timing')}, action={decision.get('action')}, "
               f"break={decision.get('session_break')}, "
+              f"aff_delta={decision.get('affinity_delta', 0)}, "
               f"reason={decision.get('reasoning', '')}")
     except Exception as e:
         print(f"[Decision] 실패, 기본값: {e}")
@@ -559,6 +582,13 @@ Output JSON only:
     # wrap_up은 Jiho가 떠나는 거니까 자동으로 세션 종료로 간주
     if decision["timing"] == "wrap_up":
         decision["session_break"] = True
+
+    try:
+        decision["affinity_delta"] = max(-10, min(10, int(decision.get("affinity_delta", 0))))
+    except (TypeError, ValueError):
+        decision["affinity_delta"] = 0
+    if not isinstance(decision.get("affinity_reason"), str):
+        decision["affinity_reason"] = ""
 
     if came_back_from:
         decision["came_back_from"] = came_back_from

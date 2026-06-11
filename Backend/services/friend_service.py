@@ -168,27 +168,35 @@ class FriendService:
     def stream_reply(self, user_message: str) -> Iterator[dict]:
         """Yields {"delta": str} chunks, then affinity, then done."""
         turn_started = time.perf_counter()
-        old_affinity = self._apply_delta(self._affinity_delta(user_message))
         away = self._pick_away_decision()
 
         if away.mode in {"delayed", "cooldown"}:
             yield {"status": away.mode, "wait_seconds": away.wait_seconds}
             time.sleep(away.wait_seconds)
 
-        # Long-term RAG retrieval (mirrors AI_Friend.py main loop)
+        # Long-term RAG retrieval (top_k uses CURRENT affinity, before LLM delta)
         top_k = 1 if af.affinity <= 40 else 5
         if af.USE_LONG_TERM_MEMORY:
             long_term = af.get_long_term_memory(user_message, top_k=top_k)
         else:
             long_term = []
 
-        # Decision Layer (gpt-4o-mini): emotion + timing + action + session_break
+        # Decision Layer (gpt-4o-mini): emotion + timing + action + session_break + affinity_delta
         time_str, time_ctx = af._consume_time_context_for_turn()
         decision = af.make_decision(user_message, long_term, time_str, time_ctx)
         agent_emo = {
             "emotion": decision.get("emotion", ""),
             "reason": decision.get("emotion_reason", ""),
         }
+
+        # Apply LLM-judged affinity delta from the decision layer (replaces keyword stub)
+        aff_delta = int(decision.get("affinity_delta", 0))
+        old_affinity = self._apply_delta(aff_delta)
+        actual_change = af.affinity - old_affinity
+        print(
+            f"[호감도] {old_affinity} → {af.affinity} "
+            f"({actual_change:+d}) | {decision.get('affinity_reason', '')}"
+        )
 
         # Build prompt with full persona + RAG + STM + decision cues + emotion
         prompt = af.build_prompt(
