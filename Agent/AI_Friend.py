@@ -219,7 +219,10 @@ def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
         })
 
     scored.sort(key=lambda x: x["score"], reverse=True)
-    return scored[:top_k]
+    top = scored[:top_k]
+    for i, m in enumerate(top, 1):
+        print(f"[Memory] TOP{i}: {m['description']}, score={m['score']}")
+    return top
 
 # ── 메모리 저장 공통 헬퍼 ────────────────────────────────────────────
 def _save_memory(memory_type: str, description: str, poignancy: int) -> None:
