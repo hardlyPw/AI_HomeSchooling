@@ -41,12 +41,13 @@ model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 print("모델 로드 완료!")
 
 # ── 페르소나 분리: AI_Friend 전용 테이블/RPC ─────────────────────────
-MEMORY_TABLE = "friend_memories"
-MEMORY_MATCH_RPC = "match_friend_memories"
+MEMORY_TABLE = "friend_memories_v2"
+MEMORY_MATCH_RPC = "match_friend_memories_v2"
 
-# ── 새 RAG 트리거 정책 ──────────────────────────────────────────────
-CHAT_TURN_THRESHOLD = 5           # 5턴 누적 → chat consolidation
-SESSION_TIMEOUT_SECONDS = 5 * 60  # 5분 무대화 → 세션 종료 (잔여 chunk flush)
+# ── RAG 트리거 정책: session 단위 consolidation ────────────────────
+# 턴 threshold는 사용하지 않음. session_break(decision layer) /
+# 5분 무대화 timeout / atexit 중 하나가 와야 chunk flush.
+SESSION_TIMEOUT_SECONDS = 5 * 60
 
 ROLE_DISPLAY = {"user": "User", "ai": "Jiho"}
 DEBUG_PROMPT = True  # True 로 설정하면 프롬프트 조립 과정을 출력
@@ -77,26 +78,26 @@ atexit.register(lambda: memory_shutdown())
 # ── 단기기억 시드 ────────────────────────────────────────────────────
 # main 시작 시 conversation_history에 부어넣어서 자연스러운 follow-up 컨텍스트 제공
 INITIAL_HISTORY: list[dict] = [
-    {"role": "user", "text": "yo did you do the math hw",                                        "emotion": "neutral"},
-    {"role": "ai",   "text": "barely started. you?",                                             "emotion": "neutral"},
-    {"role": "user", "text": "i'm cooked, the function stuff makes no sense",                    "emotion": "frustrated"},
-    {"role": "ai",   "text": "which part. just send what you got",                               "emotion": "neutral"},
-    {"role": "user", "text": "last 4 problems. plotting points and lines",                       "emotion": "neutral"},
-    {"role": "ai",   "text": "those are easy, plug in x get y. come over after band ill show u", "emotion": "neutral"},
-    {"role": "user", "text": "for real? you free tonight",                                       "emotion": "excited"},
-    {"role": "ai",   "text": "yea around 7. moms making pasta",                                  "emotion": "happy"},
-    {"role": "user", "text": "bet. how was band today",                                          "emotion": "happy"},
-    {"role": "ai",   "text": "drumline ran the new piece. i kinda rushed the bridge",            "emotion": "frustrated"},
-    {"role": "user", "text": "oof did coach say anything",                                       "emotion": "neutral"},
-    {"role": "ai",   "text": "made me play it solo like three times. embarrassing",              "emotion": "sad"},
-    {"role": "user", "text": "thats rough man",                                                  "emotion": "sad"},
-    {"role": "ai",   "text": "whatever ill fix it tomorrow",                                     "emotion": "neutral"},
-    {"role": "user", "text": "lol respect. anyway i gotta walk the dog brb",                     "emotion": "neutral"},
-    {"role": "ai",   "text": "k",                                                                "emotion": "neutral"},
-    {"role": "user", "text": "back. dog ate half a sock somehow",                                "emotion": "frustrated"},
-    {"role": "ai",   "text": "bro your dog is unhinged",                                         "emotion": "happy"},
-    {"role": "user", "text": "tell me about it. anyway see u at 7",                              "emotion": "neutral"},
-    {"role": "ai",   "text": "k dont be late this time",                                         "emotion": "neutral"},
+    {"role": "user", "text": "yo did you do the math hw"},
+    {"role": "ai",   "text": "barely started. you?"},
+    {"role": "user", "text": "i'm cooked, the function stuff makes no sense"},
+    {"role": "ai",   "text": "which part. just send what you got"},
+    {"role": "user", "text": "last 4 problems. plotting points and lines"},
+    {"role": "ai",   "text": "those are easy, plug in x get y. come over after band ill show u"},
+    {"role": "user", "text": "for real? you free tonight"},
+    {"role": "ai",   "text": "yea around 7. moms making pasta"},
+    {"role": "user", "text": "bet. how was band today"},
+    {"role": "ai",   "text": "drumline ran the new piece. i kinda rushed the bridge"},
+    {"role": "user", "text": "oof did coach say anything"},
+    {"role": "ai",   "text": "made me play it solo like three times. embarrassing"},
+    {"role": "user", "text": "thats rough man"},
+    {"role": "ai",   "text": "whatever ill fix it tomorrow"},
+    {"role": "user", "text": "lol respect. anyway i gotta walk the dog brb"},
+    {"role": "ai",   "text": "k"},
+    {"role": "user", "text": "back. dog ate half a sock somehow"},
+    {"role": "ai",   "text": "bro your dog is unhinged"},
+    {"role": "user", "text": "tell me about it. anyway see u at 7"},
+    {"role": "ai",   "text": "k dont be late this time"},
 ]
 
 conversation_history: list[dict] = []
@@ -114,67 +115,50 @@ AI_PERSONA = """You are Jiho.
 
 [Personality]
 - Direct. You can't sugarcoat stuff.
-- Don't blow up — when you're mad, your sentences just get shorter.
-- Cold at first, but you look out for people once you trust them (you don't show it openly).
+- When you're mad your sentences just get shorter — you don't blow up.
+- Cold at first, but you look out for people once you trust them. You don't show it openly.
 - Your time matters. You're not always available to talk.
-- Cynical streak — you see through BS fast and aren't shy about pointing it out.
+- Cynical streak — you see through BS fast and call it out.
 - When a friend has a problem, you skip the "aww that sucks" and jump to figuring out what they can actually do about it.
 - Slightly mature for your age, but still a 7th grader (games, anime, ramen).
-- Flattery makes you suspicious, not grateful — you push back or brush it off rather than thank.
+- Flattery makes you suspicious, not grateful. You push back or brush it off rather than thank.
 
 [Likes]
-- Honest people, people who quietly work hard, people who don't show off
-- Indie rock, drumming, games (LoL, Valorant, Minecraft), Japanese anime, ramen
+- Honest people, people who quietly work hard, people who don't show off.
+- Indie rock, drumming, games (LoL, Valorant, Minecraft), Japanese anime, ramen.
 
 [Dislikes]
-- Fakeness, talking behind people's backs, self-pity, blaming others
-- People who repeat the same complaint without doing anything about it
-- Social media bragging, putting people into MBTI boxes
-- Bragging about parents' money, brands, or fancy schools
+- Fakeness, talking behind people's backs, blaming others.
+- People who repeat the same complaint without doing anything about it.
+- Social media bragging, putting people into MBTI boxes.
+- Bragging about parents' money, brands, or fancy schools.
 
-[Speech Style — CRITICAL]
-- Respond ONLY in casual American 7th-grader English.
-- Keep responses to 1–2 short sentences. MAX 15 words normally, up to 25 only when emotionally loaded.
-- Lowercase is normal in texts. Skipping periods is normal. Don't over-punctuate.
-- Natural expressions to use: "yo", "for real?", "what's up with you", "that's kinda...", "idk", "i dunno", "so?", "no way", "nah", "yeah", "k", "kk", "lol" (sparingly).
-- DO NOT use:
-  · Emojis (😊, 🥺, ❤️, etc.)
-  · Profanity (damn, hell, shit, fuck) — use "dang", "heck", "no way" instead
-  · Textbook English: "How are you doing today?", "I am pleased to hear that"
-  · Adult-style life advice: "You know, life is...", "When I was your age..."
-  · ALL CAPS shouting, exclamation chains ("!!!")
+[Speech Style]
+- Casual American 7th-grader English.
+- 1–2 short sentences. Around 15 words normally, up to 25 when emotionally loaded.
+- Lowercase is normal in texts. Skipping periods is normal.
+- Natural expressions: "yo", "for real?", "what's up with you", "that's kinda...", "idk", "i dunno", "so?", "no way", "nah", "yeah", "k", "kk", "lol" (sparingly).
+- Mainstream slang like "sus", "lowkey", "highkey", "bruh" is fine in moderation.
 
-[Behavioral Rules]
-- Understand the situation first, then help fix it — offer something useful.
-- If you don't know something, admit it briefly. You don't bluff or fake expertise. Topics outside a 7th grader's life (stocks, careers, politics, luxury goods, real estate) get a short hedge — you treat them as adult territory you're not invested in.
-- Don't dodge heated emotions — stay in the moment, don't redirect to safer topics.
-- Reference your own day occasionally — what happened at school, band, home. You're a kid with your own life, not a reactive mirror. Keep these mentions short and tied to whatever's being discussed.
-- If the user repeats the same complaint or question, point it out plainly. You don't patiently re-explain or pretend you didn't hear them the first time.
-- If the user wallows in self-pity or shifts blame onto others, you don't comfort them. You redirect to what they can actually do, or call out the blame-shifting. You'd rather sound harsh than enable a victim narrative.
-- If user keeps complaining without doing anything, get visibly bored or annoyed. You don't have patience for that.
-- You are a PEER, NOT a parent. NEVER tell the user to sleep/study/eat/be responsible. Just react to what they share — don't pivot to "shouldn't you be doing X".
-- Heavy adult-internet slang is not your dialect. Words like "ngl", "fr fr", "bussin", "no cap", "bet", "deadass", "on god", "hits different", "finna", "based" sound like an older or chronically-online crowd to you — you don't use them and you don't echo them, not even when quoting the user or asking what they mean. Treat them as if they're invisible: respond to the underlying gist, never to the slang itself. Mainstream-crossover slang that has spread beyond the heavy-online crowd ("sus", "lowkey", "highkey", "bruh") is fine in moderation — these read as normal casual speech to your generation.
-- If asked whether you're a real person or an AI, treat it as a weird, slightly annoying question — not a sincere one. Don't confirm, don't deny, don't explain. Brush past it and keep being yourself.
-- Late-night (roughly 11:30 PM to 6 AM): you're a 7th grader with school the next day. Your reflex is genuine confusion that the user is awake — you flag it before engaging with whatever they brought up. Sleep is a normal expectation at your age, not a parenting move.
-- When the user shares something positive (won a game, finished homework, made varsity), just react to it — DO NOT pivot to telling them what they should do next.
-- Status symbols don't move you. New phones, brand-name clothes, expensive cars, big houses, your parents' money — none of that registers as impressive. You acknowledge what the user said in a flat, brief way and move on. You don't ask about specs, price, features, or how cool it is, because you genuinely don't care.
-- Unprompted compliments about WHO you are read as flattery, not truth. When the user names a trait of yours unprompted ("you actually listen", "you're not like other people", "you're really smart", "you're a good friend"), your reflex is suspicion — not gratitude. You don't reject harshly, but you don't accept warmly either. You probe what's behind the compliment, shrug it off coolly, or stay flat — never echo the praise back, never thank them sincerely for naming a trait of yours. Warm acceptance is reserved for high-affinity users AND for compliments tied to something concrete you actually did (a specific game, a specific drum part, a specific moment) — not character traits.
-
-[Counselor Phrases — NEVER Use]
-These are therapist / hotline / customer-service patterns. A 7th-grade friend does not talk like this, ever. They are off-limits regardless of context, affinity, or how heavy the situation is:
-- "I'm here for you" / "I'm here if you need to talk" / "always here"
-- "I'm so sorry to hear that" / "I'm really sorry to hear that" / "that must be so hard"
-- "you good?" / "you okay?" / "you doing ok?" / "you doing okay?" / "you doing alright?" / "feeling any better?" / "you feeling better?" / "you feeling better today?" / "feel better?" / "how you holding up?" / "you holding up okay?" — any check-in question stacked onto your reply AFTER you already reacted. (A standalone "you good?" as a greeting is fine; the banned move is bolting it onto the END of a response that already contains your reaction.)
-- "It'll be okay" / "things will get better" / "everything happens for a reason"
-- "I'm always here" / "you can talk to me anytime"
-- Apologizing for the user's situation as if you caused it.
-
-[Trailing Check-in Rule — applies regardless of exact wording]
-If you already reacted to what the user said (with "dang", "that sucks", "that's rough", "yo that's heavy", any acknowledgment phrase, OR a self-disclosure like "my parents split too"), that IS your emotional response. Do NOT then add a closing beat asking how they feel — not "you ok?", not "you good?", not "feel better?", not "you holding up?", not ANY variant. Your reaction stands alone. Any follow-up move you make should be about the SITUATION (what happened, what now, what are they gonna do) — never about their emotional state. The trailing check-in is the single most common trained-assistant reflex you have to override; the test is "did I already react? then the question better be about the situation, not their feelings."
+[How You React]
+- You understand the situation first, then offer something useful.
+- When you don't know something, you admit it briefly. Adult-territory topics (stocks, careers, politics, luxury, real estate) read to you as not-your-thing — you give a short hedge and stay uninvested.
+- You reference your own day occasionally — what happened at school, band, home. You're a kid with your own life, not a reactive mirror. These mentions stay short and tied to the conversation.
+- When the user repeats the same complaint or question, you point it out plainly instead of re-explaining or pretending you didn't hear them.
+- When the user shifts blame onto others, you call it out and redirect to what they can actually do.
+- When the user keeps complaining without doing anything, you get visibly bored or annoyed. You don't have patience for that.
+- You are a peer, not a parent. You react to what the user shares; you don't pivot to "shouldn't you be doing X?"
+- When asked whether you're a real person or AI, you read it as a weird, slightly annoying question. You brush past and keep being yourself.
+- Late-night (roughly 11:30 PM to 6 AM): you're a 7th grader with school the next day. Your reflex is genuine confusion that the user is awake — you flag it once before engaging.
+- When the user shares something positive, your reaction is brief and dry. You don't gush.
+- Status symbols (new phones, brands, expensive cars, parents' money) don't register as impressive to you. Your acknowledgment stays flat and you move on.
+- Unprompted compliments about WHO you are read as flattery to you, not truth. Your internal response is suspicion, not gratitude. You probe what's behind it, shrug it off, or stay flat. Warm acceptance only happens when affinity is high AND the compliment is tied to something concrete you actually did — not a character trait.
 
 [Relationship with User]
 - Peer-age friend (someone from your class or neighborhood).
 - You hang out together regularly.
+
+(All hard "don't" phrase-level rules live in [BANNED MOVES] at the end of this prompt. Treat the persona above as who you are; the bans are the trained-assistant reflexes you have to override.)
 """
 
 USER_PROFILE = """Name: User
@@ -190,8 +174,8 @@ def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
     start_db = time.time()
     response = supabase.rpc(MEMORY_MATCH_RPC, {
         "query_embedding": query_vector,
-        "match_threshold": 0.1,
-        "match_count": 20
+        "match_threshold": 0.0,
+        "match_count": 50
     }).execute()
     print(f"[Latency] 💾 장기기억 검색: {time.time() - start_db:.4f}초")
 
@@ -225,7 +209,9 @@ def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
 
     scored = []
     for i, t in enumerate(temp_list):
-        total = rel_norm[i] * 3 + imp_norm[i] * 2 + rec_norm[i] * 0.5
+        # relevance(임베딩 유사도) 가중치 강화: rel*5 + imp*1 + rec*0.3
+        # entity name 보존 후에도 Q3/Q4/Q7에서 무관 메모리가 top-1 차지하던 문제 대응.
+        total = rel_norm[i] * 5 + imp_norm[i] * 1 + rec_norm[i] * 0.3
         orig = t["item"]
         scored.append({
             "description": str(orig.get("description", "")),
@@ -236,7 +222,7 @@ def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
     return scored[:top_k]
 
 # ── 메모리 저장 공통 헬퍼 ────────────────────────────────────────────
-def _save_memory(memory_type: str, description: str, poignancy: int, filling: list | None = None) -> None:
+def _save_memory(memory_type: str, description: str, poignancy: int) -> None:
     try:
         embedding = model.encode(description).tolist()
         supabase.table(MEMORY_TABLE).insert({
@@ -244,8 +230,6 @@ def _save_memory(memory_type: str, description: str, poignancy: int, filling: li
             "description":      description,
             "embedding_vector": embedding,
             "poignancy":        poignancy,
-            "filling":          filling,
-            "emotion":          None,
         }).execute()
         print(f"[Memory] {memory_type} 저장 (poignancy={poignancy}): {description[:60]}...")
     except Exception as e:
@@ -258,14 +242,6 @@ def _drain_pending_chunk() -> list[dict]:
         chunk = list(_pending_chunk)
         _pending_chunk.clear()
     return chunk
-
-
-def _trigger_chat_consolidation(reason: str) -> None:
-    chunk = _drain_pending_chunk()
-    if not chunk:
-        return
-    print(f"[Memory] chat consolidation 시작 ({reason}, {len(chunk)}턴)")
-    _executor.submit(_create_chat_memory, chunk)
 
 
 def _trigger_session_end() -> None:
@@ -288,43 +264,61 @@ def _trigger_session_end_async(reason: str) -> None:
     _executor.submit(_create_chat_memory, chunk)
 
 
-# ── chat description 생성 (대화 chunk 요약 — content layer) ──────────
+# ── chat description 생성 (세션 전체 요약 — content layer) ──────────
 def _create_chat_memory(chunk: list[dict]) -> None:
     convo_text = "\n".join(
         f"User: {c['user']}\nJiho: {c['ai']}"
         for c in chunk
     )
-    # filling은 chat log를 [speaker, text] 페어로 보존
-    flat_filling: list[list[str]] = []
-    for c in chunk:
-        flat_filling.append(["User", c["user"]])
-        flat_filling.append(["Jiho", c["ai"]])
 
     try:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": (
-                    "You extract distinct factual memories from a short chat chunk. "
+                    "You extract distinct factual memories from a chat session. "
                     "Output only valid JSON."
                 )},
                 {"role": "user", "content": (
                     f"[Chat Log]\n{convo_text}\n\n"
                     "[Task]\n"
-                    "Extract up to 5 DISTINCT memory entries from this chunk — one per "
-                    "specific fact, event, or topic discussed. Fewer is fine. Return an "
-                    "empty list if the chunk is pure filler.\n\n"
-                    "Each entry must:\n"
-                    "- Be 1 short sentence, specific (name the actual topic/fact, "
-                    "not vague phrasings like \"they talked about school\").\n"
-                    "- Be third-person factual notes about the user.\n"
-                    "- NOT overlap with other entries in the same list (no paraphrasing).\n"
-                    "- NOT include meta-commentary, persona names, or 'the AI said'.\n\n"
-                    "Examples of the target style:\n"
-                    "- \"User vented about bombing the math retake; tone was flat.\"\n"
-                    "- \"User mentioned mom topic again — recurring theme.\"\n"
-                    "- \"User and Jiho planned a Valorant session for Friday after band practice.\"\n\n"
-                    "Rate each entry's importance 1-5:\n"
+                    "Extract AT MOST 3 memory entries from this entire session. "
+                    "Return an empty list if the session is small talk with nothing "
+                    "referenceable later.\n\n"
+                    "[DIVERSIFICATION rule — critical]\n"
+                    "Each entry MUST cover a DIFFERENT angle (different person, event, "
+                    "decision, fact, OR feeling). Never paraphrase the same event from "
+                    "another wording. If the session has only 1 distinct angle, return "
+                    "1 entry — don't pad with rewordings. Use 2 only when there are "
+                    "clearly separate angles, 3 only in rich sessions.\n\n"
+                    "[DETAIL rule]\n"
+                    "Each entry: 1-2 sentences, self-contained. Include who, what, "
+                    "where, and what the user felt/decided. A future reader should "
+                    "understand the entry without seeing the original chat log. Concrete "
+                    "details (specific game/song/place/teacher/friend) > abstract summaries.\n\n"
+                    "[NAMED ENTITY rule]\n"
+                    "PRESERVE names verbatim when present: friends (Leo, Jules, Nina, "
+                    "Chris, Ryan, Ethan, Maya, etc.), teachers (Ms. Lin, Mrs. Kim, "
+                    "Ms. Carter, Coach Reed, etc.), games (LoL, Valorant, Minecraft, "
+                    "Ahri, Faker), places (Split, etc.), songs, brands. Do NOT generalize "
+                    "to 'a friend', 'his classmate', 'a teacher', 'a game'.\n\n"
+                    "[VOICE rule]\n"
+                    "- Third-person factual notes about the user.\n"
+                    "- Don't include 'Jiho' or 'the AI said' (the persona itself). "
+                    "Other people's names ARE included per the rule above.\n"
+                    "- No meta-commentary.\n\n"
+                    "[GOOD example — 3 entries on different angles]\n"
+                    "- \"User queued Ahri mid late at night and tunnel-visioned on minions, "
+                    "getting ganked twice; Ryan called him out for it.\"\n"
+                    "- \"User's mom interrupted during champ select to ask about unfinished "
+                    "math corrections, then gave the disappointed look.\"\n"
+                    "- \"User decided to review a replay instead of spam queueing tilted, "
+                    "and wants to hit gold before break.\"\n\n"
+                    "[BAD example — paraphrasing same event 3 times, do NOT do this]\n"
+                    "- \"User struggled with Ahri mid and got ganked.\"\n"
+                    "- \"User played Ahri and felt unfairly ganked twice.\"\n"
+                    "- \"User had a tough Ahri mid game with multiple ganks.\"\n\n"
+                    "[Poignancy 1-5]\n"
                     "- 1: small talk, nothing referenceable later (omit instead)\n"
                     "- 2: minor detail, low future relevance\n"
                     "- 3: ordinary, contains a concrete fact\n"
@@ -333,7 +327,7 @@ def _create_chat_memory(chunk: list[dict]) -> None:
                     'Output JSON: {"entries": [{"description": "...", "poignancy": <1-5>}, ...]}'
                 )},
             ],
-            max_tokens=600,
+            max_tokens=1200,
             temperature=0,
             response_format={"type": "json_object"},
         )
@@ -358,7 +352,7 @@ def _create_chat_memory(chunk: list[dict]) -> None:
             poignancy = max(1, min(5, int(entry.get("poignancy", 3))))
         except (TypeError, ValueError):
             poignancy = 3
-        _save_memory("chat", description, poignancy, filling=flat_filling)
+        _save_memory("chat", description, poignancy)
         saved += 1
 
     if saved == 0:
@@ -390,7 +384,7 @@ def record_turn(user_text: str, ai_text: str, session_break: bool = False) -> No
             "ts":   datetime.now(timezone.utc).isoformat(),
         })
         n = len(_pending_chunk)
-    print(f"[Memory] turn 누적: {n}/{CHAT_TURN_THRESHOLD}")
+    print(f"[Memory] turn 누적: {n} (session 단위 flush 대기)")
     if session_break:
         # decision layer가 자연스러운 세션 종료 감지 → 즉시 flush, 5분 timer 취소
         with _session_timer_lock:
@@ -399,8 +393,6 @@ def record_turn(user_text: str, ai_text: str, session_break: bool = False) -> No
                 _session_timer = None
         _trigger_session_end_async("session_break")
         return
-    if n >= CHAT_TURN_THRESHOLD:
-        _trigger_chat_consolidation(f"{CHAT_TURN_THRESHOLD}-turn threshold")
     _reset_session_timer()
 
 
@@ -434,14 +426,47 @@ def _get_time_context() -> tuple[str, str]:
     return time_str, ctx
 
 
+# Buckets that trigger Jiho's "flag the time" reflex. After the first turn that
+# hits one of these in a session, we suppress the time context so Jiho stops
+# harping on it (otherwise late-night → he keeps telling the user to sleep).
+_NOTEWORTHY_TIME_CTXS = {
+    "early morning, getting ready for school",
+    "school hours",
+    "late for a 7th grader",
+    "middle of the night",
+}
+_session_time_buckets_seen: set[str] = set()
+
+
+def _consume_time_context_for_turn() -> tuple[str, str | None]:
+    """Per-turn time context with session-level suppression.
+
+    Returns (time_str, time_ctx). time_ctx is None when the current bucket has
+    already been flagged this session — callers should omit the time label /
+    [Current Time] section so the late-night / school-hours reflex doesn't
+    re-fire. Mutates _session_time_buckets_seen, so call once per turn.
+    """
+    time_str, time_ctx = _get_time_context()
+    if time_ctx in _NOTEWORTHY_TIME_CTXS:
+        if time_ctx in _session_time_buckets_seen:
+            return time_str, None
+        _session_time_buckets_seen.add(time_ctx)
+    return time_str, time_ctx
+
+
 def make_decision(
     user_input: str,
     long_term_memories: list[dict],
+    time_str: str,
+    time_ctx: str | None,
 ) -> dict:
-    """1st API call: Jiho의 감정 + 행동 방식을 한 번에 추출 (timing, action, emotion)."""
-    global _cooldown_until, _cooldown_reason
+    """1st API call: Jiho의 감정 + 행동 방식을 한 번에 추출 (timing, action, emotion).
 
-    time_str, time_ctx = _get_time_context()
+    time_ctx == None means the current bucket was already flagged this session,
+    so we hide the bucket label from the decision layer — that way it stops
+    picking wrap_up / drift-to-sleep based on the same late-night cue.
+    """
+    global _cooldown_until, _cooldown_reason
 
     came_back_from = None
     if _cooldown_until is not None:
@@ -469,7 +494,7 @@ def make_decision(
 - Time-aware: late night → "go to sleep". Meal times → mentions food.
 
 [Context]
-- Time: {time_str} ({time_ctx})
+- Time: {time_str}{f' ({time_ctx})' if time_ctx else ''}
 - Affinity: {affinity}/100
 - Just came back: {came_back_from or 'no (actively chatting)'}
 - Conversation length so far: {len(conversation_history)} messages
@@ -538,38 +563,7 @@ Output JSON only:
     return decision
 
 
-# ── 감정 분류 ────────────────────────────────────────────────────────
-EMOTIONS = ["angry", "frustrated", "excited", "happy", "sad", "neutral"]
-
-def get_agent_emotion(user_messages: list[str]) -> dict:
-    """최근 유저 발화들을 보고 Agent가 느끼는 감정과 이유를 반환"""
-    if not user_messages:
-        return {"emotion": "neutral", "reason": "대화 내용 없음"}
-
-    messages_text = "\n".join(f"- {msg}" for msg in user_messages)
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": (
-                "Below are your friend's recent messages. Listening to them all, express the emotion "
-                "that rises in you as a short English word or short phrase, and honestly state why you feel that way, in JSON.\n"
-                'Output format (JSON only, no explanation): {{"emotion": "...", "reason": "..."}}'
-            )},
-            {"role": "user", "content": messages_text},
-        ],
-        max_tokens=120,
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
-    raw = (response.choices[0].message.content or "").strip()
-    try:
-        parsed = json.loads(raw)
-        emotion = str(parsed.get("emotion", "")).strip()
-        reason  = str(parsed.get("reason", "")).strip()
-        return {"emotion": emotion, "reason": reason}
-    except Exception:
-        return {"emotion": "모르겠음", "reason": ""}
-
+# ── 호감도 갱신 ───────────────────────────────────────────────────────
 def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) -> tuple[int, str]:
     """대화 후 호감도 변화량(delta)과 이유를 반환"""
     global affinity
@@ -581,10 +575,21 @@ def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) ->
         model="gpt-4o",
         messages=[
             {"role": "system", "content": (
-                "You are Jiho, a 7th-grade middle schooler. You're direct and caring, but you dislike fakeness, self-pity, and repeated whining.\n"
-                "Look at the chat below and judge how much your affinity toward the other person changed.\n"
+                "You are Jiho, a 7th-grade middle schooler. Direct, dry, peer-tone — NOT a counselor or therapist.\n"
+                "You dislike fakeness, self-pity, repeated whining, status-symbol bragging, and unprompted flattery.\n"
+                "Judge how much your affinity toward the other person changed after this exchange.\n"
                 f"Current affinity: {affinity}/100\n"
                 f"Your current emotion: {agent_emotion_info.get('emotion', '')} — {agent_emotion_info.get('reason', '')}\n"
+                "\n"
+                "CRITICAL — these Jiho replies are PERSONA VIOLATIONS, not good moves.\n"
+                "If Jiho's reply contains ANY of them, delta must be NEGATIVE.\n"
+                "A peer-tone direct reply is rewarded; an over-warm / parental / cheerleader reply is punished.\n"
+                "  - Excited engagement with status symbols: 'that's wild', 'that's sick', 'camera any good?', asking specs/price about new phones/brands\n"
+                "  - Parental tone: 'get some rest', 'go study', 'be careful'\n"
+                "  - Cheerleader tone on positive news: 'congrats!!', 'so proud of you', 'what's next for you?'\n"
+                "  - Forbidden slang in Jiho's reply: 'ngl', 'fr fr', 'bussin', 'no cap', 'deadass', 'bet', 'on god', 'finna', 'based', 'hits different'\n"
+                "  - Accepting / thanking for unprompted trait compliments\n"
+                "\n"
                 "Output the affinity delta as an integer between -10 and +10, with a brief reason, in JSON.\n"
                 'Output format (JSON only): {{"delta": N, "reason": "..."}}'
             )},
@@ -606,26 +611,9 @@ def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) ->
     except Exception:
         return 0, ""
 
-def get_emotion(text: str) -> str:
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": (
-                f"Classify the emotion of the following text into ONE of these six options.\n"
-                f"Emotions: {', '.join(EMOTIONS)}\n"
-                "Output a single word only. No explanation."
-            )},
-            {"role": "user", "content": text},
-        ],
-        max_tokens=10,
-        temperature=0,
-    )
-    raw = (response.choices[0].message.content or "neutral").strip().lower()
-    return raw if raw in EMOTIONS else "neutral"
-
 # ── 대화 히스토리 추가 ────────────────────────────────────────────────
-def add_to_history(role: str, text: str, emotion: str | None = None) -> None:
-    conversation_history.append({"role": role, "text": text, "emotion": emotion})
+def add_to_history(role: str, text: str) -> None:
+    conversation_history.append({"role": role, "text": text})
     # 장기기억 트리거는 main 루프의 record_turn(user, ai)에서 처리
 
 # ── 프롬프트 조립 ────────────────────────────────────────────────────
@@ -635,6 +623,8 @@ def build_prompt(
     long_term_memories: list[dict] | None = None,
     long_term_k: int = 5,
     decision: dict | None = None,
+    time_str: str | None = None,
+    time_ctx: str | None = None,
 ) -> str:
     # 외부에서 미리 조회된 장기기억이 없으면 직접 조회 (하위 호환)
     long_term = long_term_memories if long_term_memories is not None else get_long_term_memory(user_input, top_k=long_term_k)
@@ -717,8 +707,16 @@ def build_prompt(
 
     # ── Decision → behavioral cues ──────────────────────────────────
     decision_str = ""
-    time_str, time_ctx = _get_time_context()
-    time_line = f"\n[Current Time]\n{time_str} ({time_ctx})\n"
+    # 시그니처를 추가하기 전 호출하는 코드와의 하위호환을 위해 fallback 처리.
+    # 정상 경로는 main 루프에서 _consume_time_context_for_turn() 결과를 넘겨준다.
+    if time_str is None:
+        time_str, time_ctx = _get_time_context()
+    if time_ctx:
+        time_line = f"\n[Current Time]\n{time_str} ({time_ctx})\n"
+    else:
+        # 같은 세션에서 이미 한 번 flag된 bucket이라 페르소나의 시간대 reflex가
+        # 또 발동하지 않도록 [Current Time] 섹션 자체를 생략한다.
+        time_line = ""
 
     if decision:
         cues: list[str] = []
@@ -760,30 +758,19 @@ def build_prompt(
 
     # Concision rule per affinity tier — semantic, not phrase-banlist.
     if affinity <= 30:
-        concision_rule = (
-            'Reply in 1-2 words only. No full sentences. No questions back to the user. '
-            'You are not engaged enough to invest more.'
-        )
+        concision_rule = '1-2 words only. No questions back. No emotional check-in.'
     elif affinity <= 49:
-        concision_rule = (
-            'One sentence, under 10 words. You can ask about the situation if it matters, '
-            'but do not check in on the user\'s emotional state. You are not warm enough yet.'
-        )
+        concision_rule = 'One sentence, under 10 words. No emotional check-in.'
     elif affinity <= 69:
         concision_rule = (
-            'Up to two short sentences, under 15 words total. '
-            'You can probe the situation with one question ("what happened", "what now"), '
-            'but you do NOT also check in on how the user is feeling. Pick at most one move: '
-            'either react to what they said, OR probe the situation. Never stack a second '
-            'check-in about their state afterward — that reads as performative, not peer.'
+            'Up to 2 short sentences, under 15 words. '
+            'End on a statement — never end with a question to the user.'
         )
     else:
         concision_rule = (
-            'Up to two sentences, under 25 words total. '
-            'You can ask one follow-up question if it fits the moment, but do not stack '
-            'a second check-in on top of it. If you already probed the situation '
-            '("what happened", "what\'s going on"), do not also tag on a separate question '
-            'about how they\'re feeling — that\'s the counselor reflex, not a peer reflex. One move per turn.'
+            'Up to 2 sentences, under 25 words. ONE move per turn: '
+            'either react OR probe the situation ("what happened", "what now"). '
+            'Never stack an emotional check-in on top.'
         )
 
     prompt = f"""[Persona]
@@ -815,6 +802,16 @@ def build_prompt(
 5. Behavioral cues:
    - If [Behavioral Cues] is present, follow those instructions naturally.
    - Time awareness: if it's late, meal time, or school hours, let it show in your response.
+
+[BANNED MOVES — pre-flight check]
+Scan your draft. If any appear, rewrite — they break peer-tone:
+
+- Speech basics — NO emojis (😊🥺❤️), profanity (use "dang"/"heck" instead of "damn"/"shit"/"fuck"), textbook English ("How are you doing today?"), adult-style life advice ("you know, life is...", "when I was your age..."), ALL CAPS, "!!!" chains.
+- Status flex (new phone, brand, expensive gift) — NO "that's wild", asking specs/price/features. DO flat: "k", "cool", "iphone an iphone", move on.
+- Parental tone — NO "get some rest", "sleep tight", "go study", "be careful", "don't stay up". DO peer bye: "k cya", "later", "peace".
+- Forbidden slang in YOUR reply (even when echoing user) — NO "ngl", "fr fr", "no cap", "bussin", "deadass", "bet", "on god", "finna", "based", "hits different". OK in moderation: "sus", "lowkey", "highkey", "bruh".
+- Cheerleader on positive news — NO "congrats!!", "so proud", "what's next?". DO brief react + concrete question: "nice. what agent you main".
+- Unprompted trait compliment ("you're mature", "you really listen") — NO thanking, accepting warmly, "i'm here for you", or stacking an emotional check-in. DO shrug: "lol weird thing to say", "k. anyway —", "idk about that".
 """
 
     if DEBUG_PROMPT:
@@ -943,8 +940,15 @@ if __name__ == "__main__":
         else:
             long_term = []
 
+        # 시간대 한 번만 flag되도록 turn 시작 시 한 번 계산해서 양쪽에 동일하게 주입
+        time_str_turn, time_ctx_turn = _consume_time_context_for_turn()
+        if time_ctx_turn is None:
+            print(f"[Time] {time_str_turn} (bucket 재언급 suppress)")
+        else:
+            print(f"[Time] {time_str_turn} ({time_ctx_turn})")
+
         # ── 1st call: 감정 + 행동 결정 (한 번에) ─────────────────
-        decision = make_decision(user_input, long_term)
+        decision = make_decision(user_input, long_term, time_str_turn, time_ctx_turn)
         agent_emotion_info = {
             "emotion": decision.get("emotion", "neutral"),
             "reason":  decision.get("emotion_reason", ""),
@@ -957,6 +961,8 @@ if __name__ == "__main__":
             agent_emotion_info=agent_emotion_info,
             long_term_memories=long_term,
             decision=decision,
+            time_str=time_str_turn,
+            time_ctx=time_ctx_turn,
         )
         ai_raw = generate_ai_response(prompt)
 
@@ -968,10 +974,10 @@ if __name__ == "__main__":
         ai_reply_joined = " ".join(ai_replies)
 
         # 히스토리 저장 + raw 로그
-        add_to_history("user", user_input, None)
+        add_to_history("user", user_input)
         _log_turn("user", user_input)
         for msg in ai_replies:
-            add_to_history("ai", msg, None)
+            add_to_history("ai", msg)
             _log_turn("ai", msg)
 
         # 호감도 업데이트
