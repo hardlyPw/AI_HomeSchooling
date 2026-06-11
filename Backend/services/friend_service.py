@@ -96,6 +96,14 @@ class FriendService:
         drain_pending = getattr(af, "_drain_pending_chunk", None)
         if callable(drain_pending):
             drain_pending()
+        self._reset_long_term_memory_for_demo()
+
+    def _reset_long_term_memory_for_demo(self) -> None:
+        """Restore the demo long-term memory baseline when the Supabase RPC exists."""
+        try:
+            af.supabase.rpc("reset_friend_memories_v2_to_demo_seed", {}).execute()
+        except Exception as exc:
+            print(f"[FriendService] demo DB reset skipped: {exc!s:.200s}")
 
     def force_next_cooldown(self) -> None:
         self._force_next_cooldown = True
@@ -159,6 +167,7 @@ class FriendService:
     # ── Streaming reply ──────────────────────────────────────────────
     def stream_reply(self, user_message: str) -> Iterator[dict]:
         """Yields {"delta": str} chunks, then affinity, then done."""
+        turn_started = time.perf_counter()
         old_affinity = self._apply_delta(self._affinity_delta(user_message))
         away = self._pick_away_decision()
 
@@ -173,15 +182,28 @@ class FriendService:
         else:
             long_term = []
 
-        # Build prompt via AI_Friend.build_prompt (full persona + RAG + STM)
+        # Decision Layer (gpt-4o-mini): emotion + timing + action + session_break
+        time_str, time_ctx = af._consume_time_context_for_turn()
+        decision = af.make_decision(user_message, long_term, time_str, time_ctx)
+        agent_emo = {
+            "emotion": decision.get("emotion", ""),
+            "reason": decision.get("emotion_reason", ""),
+        }
+
+        # Build prompt with full persona + RAG + STM + decision cues + emotion
         prompt = af.build_prompt(
             user_input=user_message,
             long_term_memories=long_term,
             long_term_k=top_k,
+            decision=decision,
+            agent_emotion_info=agent_emo,
+            time_str=time_str,
+            time_ctx=time_ctx,
         )
 
         # Stream reply (AI_Friend.generate_ai_response is non-streaming, so we
         # call the openai client directly with stream=True here)
+        llm_started = time.perf_counter()
         stream = af.openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "system", "content": prompt}],
@@ -191,6 +213,7 @@ class FriendService:
         )
 
         collected: list[str] = []
+        first_delta_seconds: float | None = None
         if away.mode == "cooldown":
             prefix = f"나 {away.reason} 잠깐 갔다 왔어. "
             collected.append(prefix)
@@ -201,6 +224,8 @@ class FriendService:
                 continue
             piece = chunk.choices[0].delta.content
             if piece:
+                if first_delta_seconds is None:
+                    first_delta_seconds = time.perf_counter() - llm_started
                 collected.append(piece)
                 yield {"delta": piece}
 
@@ -213,9 +238,31 @@ class FriendService:
         # Long-term memory: feed into the chunk consolidator (5-min idle or
         # session_break triggers the gpt-4o-mini extraction → friend_memories_v2)
         try:
-            af.record_turn(user_message, reply, session_break=False)
+            af.record_turn(
+                user_message,
+                reply,
+                session_break=bool(decision.get("session_break", False)),
+            )
         except Exception as exc:
             print(f"[FriendService] record_turn failed: {exc!s:.200s}")
+
+        total_seconds = time.perf_counter() - turn_started
+        llm_seconds = time.perf_counter() - llm_started
+        first_delta_text = (
+            f"{first_delta_seconds:.2f}s"
+            if first_delta_seconds is not None
+            else "n/a"
+        )
+        print(
+            "[FriendService] response_time "
+            f"total={total_seconds:.2f}s "
+            f"llm_stream={llm_seconds:.2f}s "
+            f"first_delta={first_delta_text} "
+            f"mode={away.mode} "
+            f"wait={away.wait_seconds}s "
+            f"user_chars={len(user_message)} "
+            f"reply_chars={len(reply)}"
+        )
 
         yield {"affinity": af.affinity, "affinity_prev": old_affinity}
         yield {"done": True}
