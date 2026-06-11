@@ -89,8 +89,8 @@ type LessonState = 'idle' | 'playing' | 'paused' | 'question'
 type AppMode = 'lesson' | 'friend' | 'playlist'
 
 function App() {
-  const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
+  const [lessonInput, setLessonInput] = useState('')
+  const [lessonMessages, setLessonMessages] = useState<Message[]>([])
   const [pendingPdfSelection, setPendingPdfSelection] = useState('')
   const [selectionButtonAnchor, setSelectionButtonAnchor] = useState<SelectionButtonAnchor | null>(null)
   const [pdfSelections, setPdfSelections] = useState<string[]>([])
@@ -114,6 +114,8 @@ function App() {
   const [autoraterMode, setAutoraterMode] = useState(false)
   const [autoraterStarted, setAutoraterStarted] = useState(false)
   const [autoraterLoading, setAutoraterLoading] = useState(false)
+  const [exampleInput, setExampleInput] = useState('')
+  const [exampleMessages, setExampleMessages] = useState<Message[]>([])
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0)
   const [currentExampleImage, setCurrentExampleImage] = useState(EXAMPLE_IMAGE_PATHS[0])
 
@@ -125,10 +127,37 @@ function App() {
   const chatInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const messageIdRef = useRef(0)
+  const activeInput = autoraterMode ? exampleInput : lessonInput
+  const activeMessages = autoraterMode ? exampleMessages : lessonMessages
 
   const clearPendingPdfSelection = () => {
     setPendingPdfSelection('')
     setSelectionButtonAnchor(null)
+  }
+
+  const clearChatContext = () => {
+    setPdfSelections([])
+    clearPendingPdfSelection()
+    setPendingFigureSelection(null)
+    setFigureSelections([])
+    setPastedImageSelections([])
+    window.getSelection()?.removeAllRanges()
+  }
+
+  const resetLessonPage = () => {
+    setLessonInput('')
+    setLessonMessages([])
+    clearChatContext()
+    setShowChat(false)
+    setShowPdf(false)
+    setHasOpenedPdf(false)
+    pdfScrollTopRef.current = 0
+  }
+
+  const resetExamplePage = () => {
+    setExampleInput('')
+    setExampleMessages([])
+    clearChatContext()
   }
 
   const getSelectionButtonAnchor = (selectionRect: DOMRect): SelectionButtonAnchor | null => {
@@ -230,7 +259,7 @@ function App() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, showChat])
+  }, [activeMessages, showChat])
 
   useEffect(() => {
     if (!showPdf || !pdfContainerRef.current) return
@@ -418,7 +447,7 @@ function App() {
   const startAutoraterSession = async (imageB64: string, loadingText = 'Analyzing example...') => {
     setAutoraterLoading(true)
     const msgId = ++messageIdRef.current
-    setMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
+    setExampleMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/autorater/start', {
@@ -431,12 +460,12 @@ function App() {
         throw new Error(`HTTP ${response.status}: ${detail}`)
       }
       const data = await response.json()
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: `Isabella: ${data.opener}` } : m))
+      setExampleMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: `Isabella: ${data.opener}` } : m))
       setAutoraterStarted(true)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Error starting autorater:', msg)
-      setMessages(prev => prev.map(m =>
+      setExampleMessages(prev => prev.map(m =>
         m.id === msgId ? { ...m, text: `Failed to start: ${msg}` } : m
       ))
     } finally {
@@ -458,8 +487,7 @@ function App() {
     clearPendingPdfSelection()
     setPendingFigureSelection(null)
     if (resetConversation) {
-      setMessages([])
-      setInput('')
+      resetExamplePage()
     }
 
     try {
@@ -468,17 +496,17 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Error loading example:', msg)
-      setMessages(prev => [...prev, { role: 'assistant', text: `Failed to load example: ${msg}` }])
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Failed to load example: ${msg}` }])
       setAutoraterLoading(false)
     }
   }
 
   const sendAutoraterMessage = async () => {
-    const messageText = input.trim()
+    const messageText = exampleInput.trim()
     if (!messageText || autoraterLoading) return
 
-    setMessages(prev => [...prev, { role: 'user', text: messageText }])
-    setInput('')
+    setExampleMessages(prev => [...prev, { role: 'user', text: messageText }])
+    setExampleInput('')
     setAutoraterLoading(true)
 
     try {
@@ -490,9 +518,9 @@ function App() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
 
-      setMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.reply}` }])
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.reply}` }])
       if (data.next_opener) {
-        setMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.next_opener}` }])
+        setExampleMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.next_opener}` }])
       }
       if (data.is_done) {
         const nextExampleIndex = currentExampleIndex + 1
@@ -500,7 +528,7 @@ function App() {
           await startExampleSession(nextExampleIndex, false)
         } else {
           setAutoraterStarted(false)
-          setMessages(prev => [...prev, { role: 'assistant', text: 'Isabella: Great work. You finished all of the examples.' }])
+          setExampleMessages(prev => [...prev, { role: 'assistant', text: 'Isabella: Great work. You finished all of the examples.' }])
           window.setTimeout(() => {
             endExampleSession()
           }, 1200)
@@ -509,7 +537,7 @@ function App() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Error in autorater chat:', msg)
-      setMessages(prev => [...prev, { role: 'assistant', text: `Error: ${msg}` }])
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Error: ${msg}` }])
     } finally {
       setAutoraterLoading(false)
     }
@@ -521,13 +549,13 @@ function App() {
       return
     }
     const hasContext = pdfSelections.length > 0 || figureSelections.length > 0 || pastedImageSelections.length > 0
-    const messageText = input.trim() || (hasContext ? 'Explain this.' : '')
+    const messageText = lessonInput.trim() || (hasContext ? 'Explain this.' : '')
     if (!messageText) return
 
     const attachments = getSelectionAttachments()
     setShowChat(true)
-    setMessages(prev => [...prev, { role: 'user', text: messageText, attachments }])
-    setInput('')
+    setLessonMessages(prev => [...prev, { role: 'user', text: messageText, attachments }])
+    setLessonInput('')
 
     const body: { message: string; pdf_context?: string; figure_context?: string; figure_images?: string[]; current_video_time?: number } = { message: messageText }
     if (pdfSelections.length > 0) {
@@ -562,7 +590,7 @@ function App() {
     window.getSelection()?.removeAllRanges()
 
     const msgId = ++messageIdRef.current
-    setMessages(prev => [...prev, { role: 'assistant', text: '', id: msgId }])
+    setLessonMessages(prev => [...prev, { role: 'assistant', text: '', id: msgId }])
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/chat/stream', {
@@ -576,7 +604,7 @@ function App() {
       await consumeSSE(response.body, msgId)
     } catch (error) {
       console.error('Error:', error)
-      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '⚠️ Failed to reach the assistant.' } : m))
+      setLessonMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '⚠️ Failed to reach the assistant.' } : m))
     }
   }
 
@@ -602,11 +630,11 @@ function App() {
             try {
               const obj = JSON.parse(data)
               if (typeof obj.delta === 'string') {
-                setMessages(prev => prev.map(m =>
+                setLessonMessages(prev => prev.map(m =>
                   m.id === msgId ? { ...m, text: m.text + obj.delta } : m
                 ))
               } else if (obj.error) {
-                setMessages(prev => prev.map(m =>
+                setLessonMessages(prev => prev.map(m =>
                   m.id === msgId ? { ...m, text: `⚠️ ${obj.error}` } : m
                 ))
               }
@@ -638,6 +666,9 @@ function App() {
     setAutoraterMode(false)
     setAutoraterStarted(false)
     setAutoraterLoading(false)
+    resetExamplePage()
+    setCurrentExampleIndex(0)
+    setCurrentExampleImage(EXAMPLE_IMAGE_PATHS[0])
     setShowChat(false)
     setShowPdf(false)
     setAppMode('friend')
@@ -664,10 +695,12 @@ function App() {
 
   const openLecture = (lectureId: string) => {
     setSelectedLectureId(lectureId)
+    setAutoraterMode(false)
+    setAutoraterStarted(false)
+    setAutoraterLoading(false)
+    resetLessonPage()
     setAppMode('lesson')
     setLessonState('idle')
-    setShowPdf(false)
-    setShowChat(false)
   }
 
   if (appMode === 'friend') {
@@ -886,7 +919,7 @@ function App() {
                   </div>
                 </div>
               )}
-              {messages.map((msg, idx) => (
+              {activeMessages.map((msg, idx) => (
                 <div key={idx} className={`bubble ${msg.role}`}>
                   {msg.role === 'assistant' ? (
                     <div className="markdown-body">
@@ -1003,8 +1036,14 @@ function App() {
             <div className="input-area">
               <input
                 ref={chatInputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
+                value={activeInput}
+                onChange={e => {
+                  if (autoraterMode) {
+                    setExampleInput(e.target.value)
+                  } else {
+                    setLessonInput(e.target.value)
+                  }
+                }}
                 onPaste={handleChatPaste}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
                 placeholder={

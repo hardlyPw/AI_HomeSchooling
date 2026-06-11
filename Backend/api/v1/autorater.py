@@ -146,7 +146,11 @@ def autorater_chat(req: ChatRequest):
     answer_status = ar.assess_latest_answer(user_input, image_paths=image_paths)
 
     if answer_status == "SOLVED":
-        ai_reply = ar.build_solved_reply(ar.CURRENT_PROBLEM >= ar.TOTAL_PROBLEMS)
+        ai_reply = ar.build_solved_reply(
+            user_input,
+            ar.CURRENT_PROBLEM >= ar.TOTAL_PROBLEMS,
+            image_paths=image_paths,
+        )
     else:
         dev_message, user_message = ar.build_prompt(user_input, answer_status=answer_status)
         ai_reply = ar.generate_ai_response(dev_message, user_message, image_paths=image_paths)

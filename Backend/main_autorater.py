@@ -855,11 +855,20 @@ about that problem. Do not evaluate earlier problems and do not solve it.
 
 [Control markers]
 Do not output [EOP] or [EOF] in an opener.
+
+[Opening style]
+Start with a brief, natural meta statement that welcomes the learner into
+solving this one together, then move into the math. Vary this phrasing across
+problems; do not reuse a fixed line. Keep it casual and peer-like, for example
+"let's look at this one together" or "okay, let's work through this part."
+After that, make one grounded observation from the image and ask one concrete
+first-step question. Do not reveal the answer.
 """
         user_message = f"""[Current-problem dialogue]
 {history}
 
-Open the conversation about {descriptor}. Use one grounded observation and
+Open the conversation about {descriptor}. Include the brief collaborative
+opening style from the developer message, then use one grounded observation and
 exactly one question that invites the learner's first reasoning step.
 """
         return dev_message, user_message
@@ -882,6 +891,12 @@ An independent correctness judge classified the learner's latest message as
 The program has already determined that this problem is still active. Never
 output [EOP] or [EOF]. A correct intermediate step is not completion; respond
 to it and ask for the next reasoning step.
+
+[Avoid circular rewriting]
+If the learner's latest message looks like an exact final expression but its
+notation is ambiguous, ask one short clarification about what they mean instead
+of asking them to transform it again. Do not require a different equivalent
+form unless the original problem explicitly asks for that representation.
 
 {LEARNING_FRIEND_POLICY}
 """
@@ -1324,6 +1339,34 @@ def parse_stance2_opener(raw: str) -> str:
 
 
 # ── GPT 답변 생성 ────────────────────────────────────────────────
+def _matches_example_one_part_b_answer(
+    user_input: str,
+    current_entries: list[dict[str, str]],
+) -> bool:
+    """Targeted acceptance for Example 1(b): f(x)=3^x at x=-2/3."""
+    label = get_current_label().strip().lower()
+    context = " ".join(
+        [label, *[entry["description"] for entry in current_entries]]
+    ).lower()
+    if label not in {"b", "(b)", "1b", "1(b)"} and "part b" not in context:
+        return False
+    if "-2/3" not in context and "negative two-thirds" not in context:
+        return False
+
+    compact = user_input.lower().replace("−", "-").replace("–", "-")
+    compact = re.sub(r"\s+", "", compact)
+    patterns = [
+        r"(^|[^0-9])3(\^|\*\*)\(?-2/3\)?($|[^0-9])",
+        r"\(?1/9\)?(\^|\*\*)\(?1/3\)?",
+        r"1/\(?3(\^|\*\*)\(?2/3\)?\)?",
+        r"(cuberoot|cube_root)\(?1/9\)?",
+        r"1/(cuberoot|cube_root)\(?9\)?",
+        r"∛\(?(1/9)\)?",
+        r"1/∛\(?9\)?",
+    ]
+    return any(re.search(pattern, compact) for pattern in patterns)
+
+
 def assess_latest_answer(
     user_input: str,
     image_paths: list[str] | None = None,
@@ -1335,6 +1378,9 @@ def assess_latest_answer(
     history = "\n".join(
         f"{entry['type']}: {entry['description']}" for entry in current_entries
     ) or "(No prior dialogue.)"
+    if _matches_example_one_part_b_answer(user_input, current_entries):
+        dprint("[Answer judge] SOLVED: matched Example 1(b) exact-form shortcut.")
+        return "SOLVED"
 
     instruction = f"""You are an independent answer checker.
 
@@ -1372,6 +1418,22 @@ formatting when the intended answer is unambiguous. For a requested ordered
 pair or vector, accept two clearly stated comma-separated values without
 requiring parentheses or angle brackets. Do not require units, a sentence, or
 an explanation unless the problem explicitly requires one.
+
+Equivalent final forms count as final answers. If the problem asks for a value,
+expression, equation, or point, accept any mathematically equivalent exact form
+unless the original problem explicitly demands a particular representation
+(for example: decimal approximation, simplified radical form, positive
+exponents only, factored form, expanded form, or a rounded value). Do not keep
+asking the learner to rewrite a correct exact answer merely because Isabella
+asked an intermediate guiding question.
+
+Interpret common typed math generously before judging:
+- Treat "^" as exponentiation.
+- Infer ordinary grouping from context when a learner types informal math, such
+  as negative exponents, fractional exponents, roots, reciprocals, fractions,
+  omitted multiplication signs, or missing outer parentheses.
+- If the intended expression is still ambiguous, return UNCLEAR and ask for
+  notation clarification rather than marking it wrong.
 
 Show the verification inside a compact JSON object so the classification is
 grounded in an explicit check. Set "contains_final_answer" to false for a
@@ -1430,8 +1492,114 @@ Output ONLY one JSON object:
         return "UNCLEAR"
 
 
-def build_solved_reply(is_last_problem: bool) -> str:
-    reply = "[EOP]\nThat's correct; you completed this problem."
+def _fallback_solved_ack(is_last_problem: bool) -> str:
+    if is_last_problem:
+        options = [
+            "That finishes it. I like how you landed the final answer cleanly.",
+            "You got the last one too. We made it through the whole set.",
+            "That wraps up the example. Your final answer checks out.",
+            "Yep, that completes the set. You kept the reasoning on track.",
+        ]
+    else:
+        options = [
+            "That works. You finished this part, so let's move to the next one.",
+            "Yep, that settles this part. Your answer matches what the problem asks.",
+            "That checks out. You solved this one, so we can keep going.",
+            "Right, that completes this subproblem. Nice and clean.",
+            "Exactly, this part is done. Let's carry that idea into the next one.",
+        ]
+    return random.choice(options)
+
+
+def build_solved_reply(
+    user_input: str,
+    is_last_problem: bool,
+    image_paths: list[str] | None = None,
+    image_urls: list[str] | None = None,
+) -> str:
+    """Build a varied Isabella acknowledgement while preserving control markers."""
+    descriptor = get_problem_descriptor()
+    type_labels = {
+        "user": "Learner",
+        "ai": "Isabella",
+        "action": "Action",
+        "chat": "Summary",
+    }
+    current_entries = PROBLEM_CONVERSATIONS.get(CURRENT_PROBLEM, [])
+    history_lines = [
+        f"{type_labels.get(entry['type'], entry['type'])}: {entry['description']}"
+        for entry in current_entries
+    ]
+    history_lines.append(f"Learner: {user_input}")
+    history = "\n".join(history_lines)
+
+    dev_message = f"""
+Only speak English. You are Isabella, a calm learning buddy.
+
+[Task]
+The learner just solved {descriptor}. Write only Isabella's visible
+acknowledgement line. Do not include [EOP] or [EOF]; the program will add those.
+
+[Tone]
+- Sound like a real peer noticing that this subproblem is complete, not a
+  template or grading rubric.
+- Vary the wording. Do not use or imitate "That's correct; you completed this
+  problem."
+- Do not begin with "That's correct."
+- Briefly acknowledge the learner's specific answer or reasoning when the
+  dialogue gives enough information.
+- For a normal completed subproblem, signal that this part is done and that you
+  can continue.
+- For the final completed problem, signal that the whole example/set is done.
+- Keep it to 8-18 words, one sentence, no question mark, no exclamation mark.
+"""
+    user_message = f"""[Current-problem dialogue]
+{history}
+
+This {"is" if is_last_problem else "is not"} the final problem in the current
+example set. Write Isabella's varied completion acknowledgement now.
+"""
+
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": user_message}]
+    for path in image_paths or []:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": encode_image_to_data_url(path), "detail": "high"},
+        })
+    for url in image_urls or []:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": url, "detail": "high"},
+        })
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4.1",
+            messages=cast(Any, [
+                {"role": "developer", "content": dev_message},
+                {"role": "user", "content": user_content},
+            ]),
+            temperature=0.8,
+            max_tokens=60,
+        )
+        visible_reply = strip_untrusted_control_markers(response.choices[0].message.content or "")
+    except Exception as e:
+        dprint(f"[Solved reply] Failed; using fallback: {e!s:.200s}")
+        visible_reply = ""
+
+    visible_reply = visible_reply.strip().strip('"').strip("'")
+    word_count = len(re.findall(r"\b[\w'-]+\b", visible_reply))
+    if (
+        not visible_reply
+        or "?" in visible_reply
+        or "!" in visible_reply
+        or word_count > 22
+        or "completed this problem" in visible_reply.lower()
+        or visible_reply.lower().startswith("that's correct")
+    ):
+        visible_reply = _fallback_solved_ack(is_last_problem)
+
+    reply = f"[EOP]\n{visible_reply}"
     if is_last_problem:
         reply += "\n[EOF]"
     return reply
@@ -1630,7 +1798,12 @@ if __name__ == "__main__":
             image_urls=image_urls or None,
         )
         if answer_status == "SOLVED":
-            ai_reply = build_solved_reply(CURRENT_PROBLEM >= TOTAL_PROBLEMS)
+            ai_reply = build_solved_reply(
+                user_input,
+                CURRENT_PROBLEM >= TOTAL_PROBLEMS,
+                image_paths=image_paths or None,
+                image_urls=image_urls or None,
+            )
         else:
             dev_message, user_message = build_prompt(
                 user_input,
