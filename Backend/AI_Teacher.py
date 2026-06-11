@@ -1,8 +1,17 @@
 import os
 import re
+import sys
 from typing import Iterator
 from dotenv import load_dotenv
 from openai import OpenAI
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 load_dotenv()
 

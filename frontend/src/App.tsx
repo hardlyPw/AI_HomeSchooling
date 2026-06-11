@@ -15,10 +15,44 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString()
 
+const LATEX_COMMAND_PATTERN = String.raw`\\(?:frac|sqrt|left|right|cdot|times|div|sum|int|text|log|ln|sin|cos|tan|theta|pi|alpha|beta|gamma|Delta|le|ge|neq|approx|infty|lim)`
+
+const normalizeMathMarkdown = (markdown: string) => {
+  const protectedLatexParens = markdown
+    .replace(/\\left\(/g, String.raw`\left\lparen`)
+    .replace(/\\right\)/g, String.raw`\right\rparen`)
+    .replace(/\\left\[/g, String.raw`\left\lbrack`)
+    .replace(/\\right\]/g, String.raw`\right\rbrack`)
+
+  return protectedLatexParens
+    .replace(/\\\[((?:.|\n)*?)\\\]/g, (_, expr: string) => `\n\n$$\n${expr.trim()}\n$$\n\n`)
+    .replace(/\\\(((?:.|\n)*?)\\\)/g, (_, expr: string) => `$${expr.trim()}$`)
+    .replace(
+      new RegExp(String.raw`\((\s*(?=[^\n]*${LATEX_COMMAND_PATTERN}|[^\n]*[A-Za-z]\s*[_^])[^\n]*?)\)(?=[,.;:]?\s|$)`, 'g'),
+      (match: string, expr: string) => {
+        const trimmed = expr.trim()
+        return trimmed && !trimmed.includes('$') ? `$${trimmed}$` : match
+      },
+    )
+    .replace(/\(\s*([abmnrtxy])\s*\)/g, '$$$1$$')
+}
+
 interface Message {
   role: 'user' | 'assistant'
   text: string
   id?: number
+  attachments?: ChatAttachment[]
+}
+
+interface ChatAttachment {
+  type: 'passage' | 'figure'
+  text: string
+  imageUrl?: string
+}
+
+interface PastedImageSelection {
+  image: string
+  name: string
 }
 
 interface Figure {
@@ -29,12 +63,18 @@ interface Figure {
   description: string
 }
 
+interface SelectionButtonAnchor {
+  left: number
+  top: number
+}
+
 type LessonState = 'idle' | 'playing' | 'paused' | 'question'
 
 function App() {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [pendingPdfSelection, setPendingPdfSelection] = useState('')
+  const [selectionButtonAnchor, setSelectionButtonAnchor] = useState<SelectionButtonAnchor | null>(null)
   const [pdfSelections, setPdfSelections] = useState<string[]>([])
 
   const [numPages, setNumPages] = useState(0)
@@ -42,6 +82,7 @@ function App() {
   const [figures, setFigures] = useState<Figure[]>([])
   const [pendingFigureSelection, setPendingFigureSelection] = useState<{ figure: Figure; image: string | null } | null>(null)
   const [figureSelections, setFigureSelections] = useState<{ figure: Figure; image: string | null }[]>([])
+  const [pastedImageSelections, setPastedImageSelections] = useState<PastedImageSelection[]>([])
 
   const [lessonState, setLessonState] = useState<LessonState>('idle')
   const [showChat, setShowChat] = useState(false)
@@ -58,10 +99,63 @@ function App() {
   } | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const pdfPanelRef = useRef<HTMLDivElement>(null)
   const pdfContainerRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const messageIdRef = useRef(0)
+
+  const clearPendingPdfSelection = () => {
+    setPendingPdfSelection('')
+    setSelectionButtonAnchor(null)
+  }
+
+  const getSelectionButtonAnchor = (selectionRect: DOMRect): SelectionButtonAnchor | null => {
+    const panelRect = pdfPanelRef.current?.getBoundingClientRect()
+    if (!panelRect) return null
+
+    const buttonHalfWidth = 66
+    const topPadding = 88
+    const x = selectionRect.left + selectionRect.width / 2 - panelRect.left
+    const y = selectionRect.top - panelRect.top - 8
+
+    return {
+      left: Math.min(Math.max(x, buttonHalfWidth), panelRect.width - buttonHalfWidth),
+      top: Math.max(y, topPadding),
+    }
+  }
+
+  const getAttachmentPreview = (text: string, maxLength = 180) => {
+    const normalized = text.replace(/\s+/g, ' ').trim()
+    return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized
+  }
+
+  const readImageFileAsDataUrl = (file: File) => new Promise<PastedImageSelection>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve({
+      image: String(reader.result),
+      name: file.name || 'Pasted image',
+    })
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(file)
+  })
+
+  const getSelectionAttachments = (): ChatAttachment[] => [
+    ...pdfSelections.map(selection => ({
+      type: 'passage' as const,
+      text: getAttachmentPreview(selection),
+    })),
+    ...figureSelections.map(selection => ({
+      type: 'figure' as const,
+      text: selection.figure.description || selection.figure.label,
+      imageUrl: selection.image || undefined,
+    })),
+    ...pastedImageSelections.map(selection => ({
+      type: 'figure' as const,
+      text: selection.name,
+      imageUrl: selection.image,
+    })),
+  ]
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -83,6 +177,21 @@ function App() {
     const timeout = window.setTimeout(() => chatInputRef.current?.focus(), 100)
     return () => window.clearTimeout(timeout)
   }, [showChat])
+
+  useEffect(() => {
+    if (!pendingPdfSelection) return
+
+    const handleSelectionChange = () => {
+      const selection = window.getSelection()
+      if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+        setPendingPdfSelection('')
+        setSelectionButtonAnchor(null)
+      }
+    }
+
+    document.addEventListener('selectionchange', handleSelectionChange)
+    return () => document.removeEventListener('selectionchange', handleSelectionChange)
+  }, [pendingPdfSelection])
 
   useEffect(() => {
     fetch('/assets/figures.json')
@@ -155,6 +264,7 @@ function App() {
     )
     if (!found) {
       setPendingFigureSelection(null)
+      if (!pendingPdfSelection.trim()) setSelectionButtonAnchor(null)
       return
     }
 
@@ -177,28 +287,45 @@ function App() {
     }
 
     setPendingFigureSelection({ figure: found, image })
+    setSelectionButtonAnchor(getSelectionButtonAnchor(new DOMRect(
+      rect.left + found.bbox.x * scale,
+      rect.top + found.bbox.y * scale,
+      (found.bbox.x2 - found.bbox.x) * scale,
+      (found.bbox.y2 - found.bbox.y) * scale,
+    )))
   }
 
   const handleMouseUp = () => {
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) {
-      setPendingPdfSelection('')
+      clearPendingPdfSelection()
       return
     }
-    setPendingPdfSelection(selection.toString().trim())
+
+    const text = selection.toString().trim()
+    if (!text) {
+      clearPendingPdfSelection()
+      return
+    }
+
+    const range = selection.getRangeAt(0)
+    const rect = range.getBoundingClientRect()
+    setPendingPdfSelection(text)
+    setSelectionButtonAnchor(getSelectionButtonAnchor(rect))
   }
 
   const confirmSelection = () => {
     const text = pendingPdfSelection.trim()
     if (text) {
-      setPdfSelections(prev => [...prev, text])
-      setPendingPdfSelection('')
+      setPdfSelections([text])
       window.getSelection()?.removeAllRanges()
     }
     if (pendingFigureSelection) {
-      setFigureSelections(prev => [...prev, pendingFigureSelection])
-      setPendingFigureSelection(null)
+      setFigureSelections([pendingFigureSelection])
     }
+    clearPendingPdfSelection()
+    setPendingFigureSelection(null)
+    setShowChat(true)
   }
 
   const removePdfSelectionAt = (idx: number) => {
@@ -207,6 +334,24 @@ function App() {
 
   const removeFigureSelectionAt = (idx: number) => {
     setFigureSelections(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const removePastedImageSelectionAt = (idx: number) => {
+    setPastedImageSelections(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleChatPaste = async (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const imageFiles = Array.from(e.clipboardData.files).filter(file => file.type.startsWith('image/'))
+    if (imageFiles.length === 0) return
+
+    e.preventDefault()
+    try {
+      const images = await Promise.all(imageFiles.map(readImageFileAsDataUrl))
+      setPastedImageSelections(prev => [...prev, ...images])
+      setShowChat(true)
+    } catch (error) {
+      console.error('Failed to read pasted image:', error)
+    }
   }
 
   const startAutoraterSession = async (imageB64: string) => {
@@ -277,12 +422,13 @@ function App() {
       await sendAutoraterMessage()
       return
     }
-    const hasContext = pdfSelections.length > 0 || figureSelections.length > 0
+    const hasContext = pdfSelections.length > 0 || figureSelections.length > 0 || pastedImageSelections.length > 0
     const messageText = input.trim() || (hasContext ? 'Explain this.' : '')
     if (!messageText) return
 
+    const attachments = getSelectionAttachments()
     setShowChat(true)
-    setMessages(prev => [...prev, { role: 'user', text: messageText }])
+    setMessages(prev => [...prev, { role: 'user', text: messageText, attachments }])
     setInput('')
 
     const body: { message: string; pdf_context?: string; figure_context?: string; figure_images?: string[]; current_video_time?: number } = { message: messageText }
@@ -291,6 +437,12 @@ function App() {
         .map((s, i) => `Passage ${i + 1}:\n"""\n${s}\n"""`)
         .join('\n\n')
     }
+    const figureImages = [
+      ...figureSelections
+        .map(s => s.image)
+        .filter((img): img is string => !!img),
+      ...pastedImageSelections.map(s => s.image),
+    ]
     if (figureSelections.length > 0) {
       body.figure_context = figureSelections
         .map((s, i) => {
@@ -298,19 +450,17 @@ function App() {
           return `Figure ${i + 1} — Label: ${s.figure.label}. Description: ${desc}`
         })
         .join('\n\n')
-      const images = figureSelections
-        .map(s => s.image)
-        .filter((img): img is string => !!img)
-      if (images.length > 0) body.figure_images = images
     }
+    if (figureImages.length > 0) body.figure_images = figureImages
     if (videoRef.current && videoRef.current.currentTime > 0) {
       body.current_video_time = videoRef.current.currentTime
     }
 
     setPdfSelections([])
-    setPendingPdfSelection('')
+    clearPendingPdfSelection()
     setFigureSelections([])
     setPendingFigureSelection(null)
+    setPastedImageSelections([])
     window.getSelection()?.removeAllRanges()
 
     const msgId = ++messageIdRef.current
@@ -412,6 +562,15 @@ function App() {
     setAutoraterCaptureDraw(null)
   }
 
+  const toggleChat = () => {
+    setShowChat(prev => !prev)
+
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+      clearPendingPdfSelection()
+    }
+  }
+
   const handlePlayBtn = () => {
     if (lessonState === 'idle') startLesson()
     else if (lessonState === 'playing') pauseLesson()
@@ -462,7 +621,7 @@ function App() {
       </div>
 
       {hasOpenedPdf && (
-        <div className={`floating-panel pdf-panel${showPdf ? '' : ' pdf-panel-hidden'}`} aria-hidden={!showPdf}>
+        <div ref={pdfPanelRef} className={`floating-panel pdf-panel${showPdf ? '' : ' pdf-panel-hidden'}`} aria-hidden={!showPdf}>
           <div className="panel-header">
             <span>Textbook</span>
             <button className="panel-close" onClick={() => setShowPdf(false)} aria-label="Close textbook">
@@ -474,9 +633,16 @@ function App() {
             <button
               className="btn-pdf-select"
               onClick={confirmSelection}
+              onMouseDown={e => e.preventDefault()}
+              style={selectionButtonAnchor ? {
+                left: selectionButtonAnchor.left,
+                right: 'auto',
+                top: selectionButtonAnchor.top,
+                transform: 'translate(-50%, -100%)',
+              } : undefined}
               title="Add this selection to the chat prompt"
             >
-              + Select
+              Add to Chat
             </button>
           )}
 
@@ -575,11 +741,32 @@ function App() {
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex]}
                       >
-                        {msg.text}
+                        {normalizeMathMarkdown(msg.text)}
                       </ReactMarkdown>
                     </div>
                   ) : (
-                    msg.text
+                    <div className="user-message-content">
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="message-attachments">
+                          {msg.attachments.map((attachment, attachmentIdx) => (
+                            <div
+                              key={`${attachment.type}-${attachmentIdx}`}
+                              className={`message-attachment-card ${attachment.imageUrl ? 'has-image' : ''}`}
+                            >
+                              {attachment.imageUrl && (
+                                <img
+                                  className="message-attachment-image"
+                                  src={attachment.imageUrl}
+                                  alt="Attached textbook crop"
+                                />
+                              )}
+                              <span className="message-attachment-text">{attachment.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <span>{msg.text}</span>
+                    </div>
                   )}
                 </div>
               ))}
@@ -591,15 +778,18 @@ function App() {
               </div>
             )}
 
-            {!autoraterMode && (pdfSelections.length > 0 || figureSelections.length > 0) && (
-              <div className="pdf-selection-list">
+            {!autoraterMode && (pdfSelections.length > 0 || figureSelections.length > 0 || pastedImageSelections.length > 0) && (
+              <div className="context-queue">
+                <div className="context-queue-header">
+                  <span>Added to chat</span>
+                </div>
                 {pdfSelections.map((sel, i) => (
-                  <div key={`p-${i}`} className="pdf-selection-chip" title={sel}>
-                    <span className="pdf-selection-chip-label">
-                      ¶{i + 1} {sel.length > 40 ? sel.slice(0, 40) + '…' : sel}
+                  <div key={`p-${i}`} className="context-queue-card" title={sel}>
+                    <span className="context-queue-text">
+                      {getAttachmentPreview(sel)}
                     </span>
                     <button
-                      className="pdf-selection-chip-remove"
+                      className="context-queue-remove"
                       onClick={() => removePdfSelectionAt(i)}
                       aria-label="Remove passage"
                     >
@@ -610,16 +800,45 @@ function App() {
                 {figureSelections.map((sel, i) => (
                   <div
                     key={`f-${i}`}
-                    className="pdf-selection-chip figure-selection-chip"
+                    className={`context-queue-card ${sel.image ? 'has-image' : ''}`}
                     title={sel.figure.description || sel.figure.label}
                   >
-                    <span className="pdf-selection-chip-label">
-                      Fig · {sel.figure.label}
-                    </span>
+                    {sel.image && (
+                      <img
+                        className="context-queue-image"
+                        src={sel.image}
+                        alt="Attached textbook crop"
+                      />
+                    )}
+                    {!sel.image && (
+                      <span className="context-queue-text">
+                        {sel.figure.description || sel.figure.label}
+                      </span>
+                    )}
                     <button
-                      className="pdf-selection-chip-remove"
+                      className="context-queue-remove"
                       onClick={() => removeFigureSelectionAt(i)}
                       aria-label="Remove figure"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {pastedImageSelections.map((sel, i) => (
+                  <div
+                    key={`img-${i}`}
+                    className="context-queue-card has-image"
+                    title={sel.name}
+                  >
+                    <img
+                      className="context-queue-image"
+                      src={sel.image}
+                      alt="Pasted chat attachment"
+                    />
+                    <button
+                      className="context-queue-remove"
+                      onClick={() => removePastedImageSelectionAt(i)}
+                      aria-label="Remove pasted image"
                     >
                       ×
                     </button>
@@ -633,6 +852,7 @@ function App() {
                 ref={chatInputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
+                onPaste={handleChatPaste}
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
                 placeholder={
                   autoraterMode && !autoraterStarted
@@ -665,7 +885,7 @@ function App() {
         </button>
         <button
           className={`quick-action ${showChat ? 'active' : ''}`}
-          onClick={() => setShowChat(prev => !prev)}
+          onClick={toggleChat}
           aria-label={showChat ? 'Hide chat' : 'Show chat'}
           title={showChat ? 'Hide chat' : 'Show chat'}
         >

@@ -24,7 +24,7 @@ class ChatService:
         if figure_images:
             n = len(figure_images)
             noun = 'image' if n == 1 else 'images'
-            parts.append(f'The clicked figure is attached as {n} {noun}.')
+            parts.append(f'I attached {n} selected {noun} for you to use when answering.')
 
         if parts:
             return "\n\n".join(parts) + f"\n\nMy question: {user_message}"
