@@ -95,7 +95,7 @@ function App() {
   const [showChat, setShowChat] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
   const [hasOpenedPdf, setHasOpenedPdf] = useState(false)
-  const [appMode, setAppMode] = useState<'lesson' | 'friend'>('lesson')
+  const [appMode, setAppMode] = useState<'lesson' | 'friend'>('friend')
 
   // Autorater (Isabella) mode state
   const [autoraterMode, setAutoraterMode] = useState(false)
@@ -436,6 +436,9 @@ function App() {
         } else {
           setAutoraterStarted(false)
           setMessages(prev => [...prev, { role: 'assistant', text: 'Isabella: Great work. You finished all of the examples.' }])
+          window.setTimeout(() => {
+            endExampleSession()
+          }, 1200)
         }
       }
     } catch (error) {
@@ -564,6 +567,15 @@ function App() {
     }
     setLessonState('paused')
     void startExampleSession(0, true)
+  }
+
+  const endExampleSession = () => {
+    setAutoraterMode(false)
+    setAutoraterStarted(false)
+    setAutoraterLoading(false)
+    setShowChat(false)
+    setShowPdf(false)
+    setAppMode('friend')
   }
 
   const toggleChat = () => {
@@ -710,7 +722,11 @@ function App() {
         <div className={autoraterMode ? 'split-panel autorater-chat-panel' : 'floating-panel chat-panel'}>
           <div className="panel-header">
             <span>{autoraterMode ? 'Solving Examples with Isabella' : 'Chat'}</span>
-            {!autoraterMode && (
+            {autoraterMode ? (
+              <button className="panel-action" onClick={endExampleSession}>
+                End example session
+              </button>
+            ) : (
             <button className="panel-close" onClick={() => setShowChat(false)} aria-label="Close chat">
               <X size={18} />
             </button>

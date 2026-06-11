@@ -183,6 +183,22 @@ textarea {
   background: #e9eef5;
 }
 
+.panel-action {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  color: #172033;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.panel-action:hover {
+  background: #eef2f7;
+}
+
 .pdf-panel {
   top: 24px;
   bottom: 24px;
@@ -826,11 +842,11 @@ textarea {
 }
 
 .friend-back,
-.friend-reset {
+.friend-reset,
+.friend-go-class {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
   height: 34px;
   padding: 0;
   border: 0;
@@ -841,13 +857,29 @@ textarea {
 }
 
 .friend-back:hover,
-.friend-reset:hover {
+.friend-reset:hover,
+.friend-go-class:hover {
   background: #eef0f4;
 }
 
 .friend-reset:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.friend-back,
+.friend-reset {
+  width: 34px;
+}
+
+.friend-go-class {
+  width: auto;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .friend-chat-title {

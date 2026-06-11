@@ -191,6 +191,9 @@ export default function FriendView({ onExit }: Props) {
           >
             dbg
           </button>
+          <button className="friend-go-class" onClick={onExit}>
+            Go to class
+          </button>
         </header>
 
         <div className="friend-chat-window" ref={scrollRef}>
