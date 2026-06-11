@@ -17,6 +17,7 @@ Agent/conversations/
 
 # IDE / OS
 .vscode/
+.vs/
 .idea/
 *.swp
 .DS_Store
