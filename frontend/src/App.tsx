@@ -37,6 +37,13 @@ const normalizeMathMarkdown = (markdown: string) => {
     .replace(/\(\s*([abmnrtxy])\s*\)/g, '$$$1$$')
 }
 
+const EXAMPLE_IMAGE_PATHS = [
+  '/assets/Examples/example_1.png',
+  '/assets/Examples/example_3.png',
+  '/assets/Examples/example_6.png',
+  '/assets/Examples/example_7.png',
+]
+
 interface Message {
   role: 'user' | 'assistant'
   text: string
@@ -94,13 +101,14 @@ function App() {
   const [autoraterMode, setAutoraterMode] = useState(false)
   const [autoraterStarted, setAutoraterStarted] = useState(false)
   const [autoraterLoading, setAutoraterLoading] = useState(false)
-  const [autoraterCaptureDraw, setAutoraterCaptureDraw] = useState<{
-    pageNum: number; startX: number; startY: number; curX: number; curY: number
-  } | null>(null)
+  const [currentExampleIndex, setCurrentExampleIndex] = useState(0)
+  const [currentExampleImage, setCurrentExampleImage] = useState(EXAMPLE_IMAGE_PATHS[0])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const pdfPanelRef = useRef<HTMLDivElement>(null)
   const pdfContainerRef = useRef<HTMLDivElement>(null)
+  const pdfScrollRef = useRef<HTMLDivElement>(null)
+  const pdfScrollTopRef = useRef(0)
   const chatInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const messageIdRef = useRef(0)
@@ -140,6 +148,18 @@ function App() {
     reader.readAsDataURL(file)
   })
 
+  const loadImageAsDataUrl = async (src: string) => {
+    const response = await fetch(src)
+    if (!response.ok) throw new Error(`Failed to load ${src}`)
+    const blob = await response.blob()
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+  }
+
   const getSelectionAttachments = (): ChatAttachment[] => [
     ...pdfSelections.map(selection => ({
       type: 'passage' as const,
@@ -170,7 +190,16 @@ function App() {
     })
     observer.observe(pdfContainerRef.current)
     return () => observer.disconnect()
-  }, [showPdf])
+  }, [showPdf, autoraterMode])
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (pdfScrollRef.current) {
+        pdfScrollRef.current.scrollTop = pdfScrollTopRef.current
+      }
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [showPdf, autoraterMode])
 
   useEffect(() => {
     if (!showChat) return
@@ -218,58 +247,6 @@ function App() {
     window.addEventListener('keydown', handleVideoShortcuts)
     return () => window.removeEventListener('keydown', handleVideoShortcuts)
   }, [])
-
-  const handleDrawMouseDown = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
-    // Autorater capture mode: free-drag region selection
-    if (autoraterMode && !autoraterStarted) {
-      e.preventDefault()
-      const rect = e.currentTarget.getBoundingClientRect()
-      setAutoraterCaptureDraw({
-        pageNum,
-        startX: e.clientX - rect.left,
-        startY: e.clientY - rect.top,
-        curX: e.clientX - rect.left,
-        curY: e.clientY - rect.top,
-      })
-      return
-    }
-  }
-
-  const handleDrawMouseMove = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
-    if (autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum) {
-      const rect = e.currentTarget.getBoundingClientRect()
-      setAutoraterCaptureDraw(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
-      return
-    }
-  }
-
-  const handleDrawMouseUp = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
-    // Autorater capture: crop and send the drawn region as image
-    if (autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum) {
-      const draw = autoraterCaptureDraw
-      setAutoraterCaptureDraw(null)
-      const rect = e.currentTarget.getBoundingClientRect()
-      const curX = e.clientX - rect.left
-      const curY = e.clientY - rect.top
-      if (Math.abs(curX - draw.startX) < 10 || Math.abs(curY - draw.startY) < 10) return
-
-      const sourceCanvas = e.currentTarget.querySelector('canvas') as HTMLCanvasElement | null
-      if (!sourceCanvas) return
-      const renderScale = sourceCanvas.width / containerWidth
-      const sx = Math.min(draw.startX, curX) * renderScale
-      const sy = Math.min(draw.startY, curY) * renderScale
-      const sw = Math.abs(curX - draw.startX) * renderScale
-      const sh = Math.abs(curY - draw.startY) * renderScale
-      const out = document.createElement('canvas')
-      out.width = Math.max(1, Math.round(sw))
-      out.height = Math.max(1, Math.round(sh))
-      const ctx = out.getContext('2d')
-      if (!ctx) return
-      ctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, out.width, out.height)
-      startAutoraterSession(out.toDataURL('image/png'))
-      return
-    }
-  }
 
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, pageNumber: number) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -373,10 +350,10 @@ function App() {
     }
   }
 
-  const startAutoraterSession = async (imageB64: string) => {
+  const startAutoraterSession = async (imageB64: string, loadingText = 'Analyzing example...') => {
     setAutoraterLoading(true)
     const msgId = ++messageIdRef.current
-    setMessages(prev => [...prev, { role: 'assistant', text: 'Analyzing problem...', id: msgId }])
+    setMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
 
     try {
       const response = await fetch('http://localhost:8000/api/v1/autorater/start', {
@@ -398,6 +375,35 @@ function App() {
         m.id === msgId ? { ...m, text: `Failed to start: ${msg}` } : m
       ))
     } finally {
+      setAutoraterLoading(false)
+    }
+  }
+
+  const startExampleSession = async (exampleIndex: number, resetConversation: boolean) => {
+    const imagePath = EXAMPLE_IMAGE_PATHS[exampleIndex]
+    if (!imagePath) return
+
+    setCurrentExampleIndex(exampleIndex)
+    setCurrentExampleImage(imagePath)
+    setAutoraterMode(true)
+    setAutoraterStarted(false)
+    setShowChat(true)
+    setHasOpenedPdf(true)
+    setShowPdf(true)
+    clearPendingPdfSelection()
+    setPendingFigureSelection(null)
+    if (resetConversation) {
+      setMessages([])
+      setInput('')
+    }
+
+    try {
+      const imageB64 = await loadImageAsDataUrl(imagePath)
+      await startAutoraterSession(imageB64, `Loading Example ${exampleIndex + 1}...`)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error('Error loading example:', msg)
+      setMessages(prev => [...prev, { role: 'assistant', text: `Failed to load example: ${msg}` }])
       setAutoraterLoading(false)
     }
   }
@@ -424,8 +430,13 @@ function App() {
         setMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.next_opener}` }])
       }
       if (data.is_done) {
-        setAutoraterMode(false)
-        setAutoraterStarted(false)
+        const nextExampleIndex = currentExampleIndex + 1
+        if (nextExampleIndex < EXAMPLE_IMAGE_PATHS.length) {
+          await startExampleSession(nextExampleIndex, false)
+        } else {
+          setAutoraterStarted(false)
+          setMessages(prev => [...prev, { role: 'assistant', text: 'Isabella: Great work. You finished all of the examples.' }])
+        }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -542,28 +553,17 @@ function App() {
     }
   }
 
-  const showTextbook = () => {
-    setHasOpenedPdf(true)
-    setShowPdf(true)
-  }
-
   const toggleTextbook = () => {
     setHasOpenedPdf(true)
     setShowPdf(prev => !prev)
   }
 
   const enterAutoraterMode = () => {
-    // 2-1: Open chat without clearing history
-    setShowChat(true)
-    // 2-2: Stop the video and open PDF in drag-select capture mode
     if (videoRef.current) {
       videoRef.current.pause()
     }
     setLessonState('paused')
-    showTextbook()
-    setAutoraterMode(true)
-    setAutoraterStarted(false)
-    setAutoraterCaptureDraw(null)
+    void startExampleSession(0, true)
   }
 
   const toggleChat = () => {
@@ -584,7 +584,8 @@ function App() {
   }
 
   return (
-    <div className="main-layout">
+    <div className={`main-layout${autoraterMode ? ' autorater-screen' : ''}`}>
+      {!autoraterMode && (
       <div className="teacher-view">
         <video
           ref={videoRef}
@@ -613,14 +614,23 @@ function App() {
           </button>
         </div>
       </div>
+      )}
 
       {hasOpenedPdf && (
-        <div ref={pdfPanelRef} className={`floating-panel pdf-panel${showPdf ? '' : ' pdf-panel-hidden'}`} aria-hidden={!showPdf}>
+        <div
+          ref={pdfPanelRef}
+          className={autoraterMode
+            ? 'split-panel autorater-pdf-panel'
+            : `floating-panel pdf-panel${showPdf ? '' : ' pdf-panel-hidden'}`}
+          aria-hidden={!autoraterMode && !showPdf}
+        >
           <div className="panel-header">
             <span>Textbook</span>
+            {!autoraterMode && (
             <button className="panel-close" onClick={() => setShowPdf(false)} aria-label="Close textbook">
               <X size={18} />
             </button>
+            )}
           </div>
 
           {!autoraterMode && (pendingPdfSelection || pendingFigureSelection) && (
@@ -641,15 +651,13 @@ function App() {
           )}
 
           <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
-            {autoraterMode && !autoraterStarted && (
-              <div className="autorater-capture-toolbar">
-                <span className="autorater-capture-hint">
-                  {autoraterLoading ? 'Analyzing…' : 'Draw a box around an example problem to start practicing with Isabella'}
-                </span>
-              </div>
-            )}
-
-            <div className="pdf-scroll">
+            <div
+              className="pdf-scroll"
+              ref={pdfScrollRef}
+              onScroll={e => {
+                pdfScrollTopRef.current = e.currentTarget.scrollTop
+              }}
+            >
               <Document
                 file="/assets/Chapter4.pdf"
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
@@ -662,13 +670,10 @@ function App() {
                       key={pageNum}
                       style={{
                         position: 'relative',
-                        cursor: autoraterMode && !autoraterStarted ? 'crosshair' : 'default',
-                        userSelect: autoraterMode && !autoraterStarted ? 'none' : 'auto',
+                        cursor: 'default',
+                        userSelect: 'auto',
                       }}
                       onClick={e => handlePageClick(e, pageNum)}
-                      onMouseDown={e => handleDrawMouseDown(e, pageNum)}
-                      onMouseMove={e => handleDrawMouseMove(e, pageNum)}
-                      onMouseUp={e => handleDrawMouseUp(e, pageNum)}
                     >
                       <Page
                         pageNumber={pageNum}
@@ -692,21 +697,6 @@ function App() {
                         />
                       )}
 
-                      {autoraterMode && !autoraterStarted && autoraterCaptureDraw && autoraterCaptureDraw.pageNum === pageNum && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: Math.min(autoraterCaptureDraw.startX, autoraterCaptureDraw.curX),
-                            top: Math.min(autoraterCaptureDraw.startY, autoraterCaptureDraw.curY),
-                            width: Math.abs(autoraterCaptureDraw.curX - autoraterCaptureDraw.startX),
-                            height: Math.abs(autoraterCaptureDraw.curY - autoraterCaptureDraw.startY),
-                            border: '2px dashed #16a34a',
-                            backgroundColor: 'rgba(22,163,74,0.12)',
-                            pointerEvents: 'none',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                      )}
                     </div>
                   )
                 })}
@@ -717,15 +707,22 @@ function App() {
       )}
 
       {showChat && (
-        <div className="floating-panel chat-panel">
+        <div className={autoraterMode ? 'split-panel autorater-chat-panel' : 'floating-panel chat-panel'}>
           <div className="panel-header">
-            <span>{autoraterMode ? 'Isabella — Practice' : 'Chat'}</span>
+            <span>{autoraterMode ? 'Solving Examples with Isabella' : 'Chat'}</span>
+            {!autoraterMode && (
             <button className="panel-close" onClick={() => setShowChat(false)} aria-label="Close chat">
               <X size={18} />
             </button>
+            )}
           </div>
 
           <div className="chat-view">
+            {autoraterMode && (
+              <div className="autorater-example-preview">
+                <img src={currentExampleImage} alt={`Example ${currentExampleIndex + 1}`} />
+              </div>
+            )}
             <div className="chat-window" ref={scrollRef}>
               {!autoraterMode && (
                 <div className="bubble assistant">
@@ -773,9 +770,9 @@ function App() {
               ))}
             </div>
 
-            {autoraterMode && !autoraterStarted && (
+            {autoraterMode && autoraterLoading && !autoraterStarted && (
               <div className="autorater-chat-hint">
-                Draw a box around a problem in the textbook to begin.
+                Isabella is reading the example...
               </div>
             )}
 
@@ -857,7 +854,7 @@ function App() {
                 onKeyDown={e => e.key === 'Enter' && sendMessage()}
                 placeholder={
                   autoraterMode && !autoraterStarted
-                    ? 'Select a problem from the textbook first…'
+                    ? 'Isabella is getting ready…'
                     : autoraterMode
                     ? 'Reply to Isabella…'
                     : 'Type a message…'
@@ -875,6 +872,7 @@ function App() {
         </div>
       )}
 
+      {!autoraterMode && (
       <div className="quick-actions" aria-label="Study tools">
         <button
           className={`quick-action ${showPdf ? 'active' : ''}`}
@@ -901,6 +899,7 @@ function App() {
           <Users size={22} />
         </button>
       </div>
+      )}
     </div>
   )
 }
