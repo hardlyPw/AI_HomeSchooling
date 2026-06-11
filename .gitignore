@@ -21,3 +21,4 @@ Agent/conversations/
 *.swp
 .DS_Store
 Thumbs.db
+main.py.backup
