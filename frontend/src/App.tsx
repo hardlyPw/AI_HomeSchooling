@@ -65,6 +65,7 @@ function App() {
   const [lessonState, setLessonState] = useState<LessonState>('idle')
   const [showChat, setShowChat] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
+  const [hasOpenedPdf, setHasOpenedPdf] = useState(false)
   const [appMode, setAppMode] = useState<'lesson' | 'friend'>('lesson')
 
   // Autorater (Isabella) mode state
@@ -477,6 +478,16 @@ function App() {
     setLessonState('playing')
   }
 
+  const showTextbook = () => {
+    setHasOpenedPdf(true)
+    setShowPdf(true)
+  }
+
+  const toggleTextbook = () => {
+    setHasOpenedPdf(true)
+    setShowPdf(prev => !prev)
+  }
+
   const enterAutoraterMode = () => {
     // 2-1: Open chat without clearing history
     setShowChat(true)
@@ -485,7 +496,7 @@ function App() {
       videoRef.current.pause()
     }
     setLessonState('paused')
-    setShowPdf(true)
+    showTextbook()
     setEditMode(false)
     setAutoraterMode(true)
     setAutoraterStarted(false)
@@ -541,8 +552,8 @@ function App() {
         </div>
       </div>
 
-      {showPdf && (
-        <div className="floating-panel pdf-panel">
+      {hasOpenedPdf && (
+        <div className={`floating-panel pdf-panel${showPdf ? '' : ' pdf-panel-hidden'}`} aria-hidden={!showPdf}>
           <div className="panel-header">
             <span>Textbook</span>
             <button className="panel-close" onClick={() => setShowPdf(false)} aria-label="Close textbook">
@@ -859,7 +870,7 @@ function App() {
       <div className="quick-actions" aria-label="Study tools">
         <button
           className={`quick-action ${showPdf ? 'active' : ''}`}
-          onClick={() => setShowPdf(prev => !prev)}
+          onClick={toggleTextbook}
           aria-label={showPdf ? 'Hide textbook' : 'Show textbook'}
           title={showPdf ? 'Hide textbook' : 'Show textbook'}
         >

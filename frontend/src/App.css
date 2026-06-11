@@ -166,6 +166,14 @@ textarea {
   left: 24px;
   width: min(860px, 48vw);
   min-width: 420px;
+  transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+}
+
+.pdf-panel-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-12px);
 }
 
 .pdf-section {
