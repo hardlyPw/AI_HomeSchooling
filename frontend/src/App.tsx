@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { ArrowLeft, FastForward, FileText, MessageCircle, Pause, Play, Users, X } from 'lucide-react'
+import { FastForward, FileText, MessageCircle, Pause, Play, Users, X } from 'lucide-react'
 import FriendView from './FriendView'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -29,8 +29,6 @@ interface Figure {
   description: string
 }
 
-const FIGURES_STORAGE_KEY = 'home_schooling_figures_v1'
-
 type LessonState = 'idle' | 'playing' | 'paused' | 'question'
 
 function App() {
@@ -41,26 +39,9 @@ function App() {
 
   const [numPages, setNumPages] = useState(0)
   const [containerWidth, setContainerWidth] = useState(600)
-  const [figures, setFigures] = useState<Figure[]>(() => {
-    const stored = localStorage.getItem(FIGURES_STORAGE_KEY)
-    if (stored) {
-      try {
-        return JSON.parse(stored) as Figure[]
-      } catch {
-        // Fall back to bundled figures.
-      }
-    }
-    return []
-  })
+  const [figures, setFigures] = useState<Figure[]>([])
   const [pendingFigureSelection, setPendingFigureSelection] = useState<{ figure: Figure; image: string | null } | null>(null)
   const [figureSelections, setFigureSelections] = useState<{ figure: Figure; image: string | null }[]>([])
-
-  const [editMode, setEditMode] = useState(false)
-  const [addFigureMode, setAddFigureMode] = useState(false)
-  const [drawing, setDrawing] = useState<{ pageNum: number; startX: number; startY: number; curX: number; curY: number } | null>(null)
-  const [pendingFigure, setPendingFigure] = useState<{ page: number; bbox: { x: number; y: number; x2: number; y2: number } } | null>(null)
-  const [editLabel, setEditLabel] = useState('')
-  const [editDescription, setEditDescription] = useState('')
 
   const [lessonState, setLessonState] = useState<LessonState>('idle')
   const [showChat, setShowChat] = useState(false)
@@ -104,16 +85,11 @@ function App() {
   }, [showChat])
 
   useEffect(() => {
-    if (localStorage.getItem(FIGURES_STORAGE_KEY)) return
     fetch('/assets/figures.json')
       .then(r => r.json())
       .then(setFigures)
       .catch(console.error)
   }, [])
-
-  useEffect(() => {
-    localStorage.setItem(FIGURES_STORAGE_KEY, JSON.stringify(figures))
-  }, [figures])
 
   const handleDrawMouseDown = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
     // Autorater capture mode: free-drag region selection
@@ -129,16 +105,6 @@ function App() {
       })
       return
     }
-    if (!editMode || !addFigureMode) return
-    e.preventDefault()
-    const rect = e.currentTarget.getBoundingClientRect()
-    setDrawing({
-      pageNum,
-      startX: e.clientX - rect.left,
-      startY: e.clientY - rect.top,
-      curX: e.clientX - rect.left,
-      curY: e.clientY - rect.top,
-    })
   }
 
   const handleDrawMouseMove = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
@@ -147,9 +113,6 @@ function App() {
       setAutoraterCaptureDraw(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
       return
     }
-    if (!editMode || !addFigureMode || !drawing || drawing.pageNum !== pageNum) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    setDrawing(prev => prev ? { ...prev, curX: e.clientX - rect.left, curY: e.clientY - rect.top } : null)
   }
 
   const handleDrawMouseUp = (e: React.MouseEvent<HTMLDivElement>, pageNum: number) => {
@@ -178,61 +141,9 @@ function App() {
       startAutoraterSession(out.toDataURL('image/png'))
       return
     }
-
-    if (!editMode || !addFigureMode || !drawing || drawing.pageNum !== pageNum) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const scale = containerWidth / 595.3
-    const curX = e.clientX - rect.left
-    const curY = e.clientY - rect.top
-
-    if (Math.abs(curX - drawing.startX) < 10 || Math.abs(curY - drawing.startY) < 10) {
-      setDrawing(null)
-      return
-    }
-
-    const round = (n: number) => Math.round(n * 10) / 10
-    const bbox = {
-      x: round(Math.min(drawing.startX, curX) / scale),
-      y: round(Math.min(drawing.startY, curY) / scale),
-      x2: round(Math.max(drawing.startX, curX) / scale),
-      y2: round(Math.max(drawing.startY, curY) / scale),
-    }
-    setDrawing(null)
-    setEditLabel(`Figure ${figures.length + 1}`)
-    setEditDescription('')
-    setPendingFigure({ page: pageNum, bbox })
-  }
-
-  const confirmAddFigure = () => {
-    if (!pendingFigure || !editLabel.trim()) return
-    const newFig: Figure = {
-      id: `fig${Date.now()}`,
-      page: pendingFigure.page,
-      bbox: pendingFigure.bbox,
-      label: editLabel.trim(),
-      description: editDescription.trim(),
-    }
-    setFigures(prev => [...prev, newFig])
-    setPendingFigure(null)
-  }
-
-  const deleteFigure = (id: string) => {
-    setFigures(prev => prev.filter(f => f.id !== id))
-  }
-
-  const exportFigures = () => {
-    const json = JSON.stringify(figures, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'figures.json'
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   const handlePageClick = (e: React.MouseEvent<HTMLDivElement>, pageNumber: number) => {
-    if (editMode) return
     const rect = e.currentTarget.getBoundingClientRect()
     const scale = containerWidth / 595.3
     const ptX = (e.clientX - rect.left) / scale
@@ -269,7 +180,6 @@ function App() {
   }
 
   const handleMouseUp = () => {
-    if (editMode) return
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) {
       setPendingPdfSelection('')
@@ -497,7 +407,6 @@ function App() {
     }
     setLessonState('paused')
     showTextbook()
-    setEditMode(false)
     setAutoraterMode(true)
     setAutoraterStarted(false)
     setAutoraterCaptureDraw(null)
@@ -572,43 +481,11 @@ function App() {
           )}
 
           <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
-            {autoraterMode && !autoraterStarted ? (
+            {autoraterMode && !autoraterStarted && (
               <div className="autorater-capture-toolbar">
                 <span className="autorater-capture-hint">
                   {autoraterLoading ? 'Analyzing…' : 'Draw a box around an example problem to start practicing with Isabella'}
                 </span>
-              </div>
-            ) : (
-              <div className="figure-toolbar">
-                {!editMode ? (
-                  <button
-                    className="btn-figure-edit"
-                    onClick={() => setEditMode(true)}
-                  >
-                    Edit Figures
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      className="btn-figure-edit btn-figure-back"
-                      onClick={() => { setEditMode(false); setAddFigureMode(false); setDrawing(null); setPendingFigure(null) }}
-                      title="Exit edit mode"
-                      aria-label="Exit edit mode"
-                    >
-                      <ArrowLeft size={16} />
-                    </button>
-                    <button
-                      className={`btn-figure-edit ${addFigureMode ? 'active' : ''}`}
-                      onClick={() => { setAddFigureMode(prev => !prev); setDrawing(null) }}
-                    >
-                      {addFigureMode ? 'Adding…' : '+ Add Figure'}
-                    </button>
-                    {addFigureMode && (
-                      <span className="figure-edit-hint">Drag to draw a box</span>
-                    )}
-                    <button className="btn-export" onClick={exportFigures}>Export JSON</button>
-                  </>
-                )}
               </div>
             )}
 
@@ -620,14 +497,13 @@ function App() {
                 {Array.from({ length: numPages }, (_, i) => {
                   const pageNum = i + 1
                   const scale = containerWidth / 595.3
-                  const pageFigs = figures.filter(f => f.page === pageNum)
                   return (
                     <div
                       key={pageNum}
                       style={{
                         position: 'relative',
-                        cursor: (editMode && addFigureMode) || (autoraterMode && !autoraterStarted) ? 'crosshair' : 'default',
-                        userSelect: (editMode && addFigureMode) || (autoraterMode && !autoraterStarted) ? 'none' : 'auto',
+                        cursor: autoraterMode && !autoraterStarted ? 'crosshair' : 'default',
+                        userSelect: autoraterMode && !autoraterStarted ? 'none' : 'auto',
                       }}
                       onClick={e => handlePageClick(e, pageNum)}
                       onMouseDown={e => handleDrawMouseDown(e, pageNum)}
@@ -641,37 +517,7 @@ function App() {
                         renderAnnotationLayer={false}
                       />
 
-                      {editMode && pageFigs.map(f => (
-                        <div
-                          key={f.id}
-                          style={{
-                            position: 'absolute',
-                            left: f.bbox.x * scale,
-                            top: f.bbox.y * scale,
-                            width: (f.bbox.x2 - f.bbox.x) * scale,
-                            height: (f.bbox.y2 - f.bbox.y) * scale,
-                            border: '2px solid #e53935',
-                            backgroundColor: 'rgba(229,57,53,0.08)',
-                            boxSizing: 'border-box',
-                            zIndex: 5,
-                          }}
-                        >
-                          <div className="figure-overlay-label">
-                            <span>{f.label}</span>
-                            <button
-                              className="figure-overlay-delete"
-                              onClick={e => { e.stopPropagation(); deleteFigure(f.id) }}
-                              onMouseDown={e => e.stopPropagation()}
-                              title="Delete figure"
-                              aria-label="Delete figure"
-                            >
-                              ×
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {!editMode && !autoraterMode && pendingFigureSelection && pendingFigureSelection.figure.page === pageNum && (
+                      {!autoraterMode && pendingFigureSelection && pendingFigureSelection.figure.page === pageNum && (
                         <div
                           className="figure-pending-highlight"
                           style={{
@@ -680,22 +526,6 @@ function App() {
                             top: pendingFigureSelection.figure.bbox.y * scale,
                             width: (pendingFigureSelection.figure.bbox.x2 - pendingFigureSelection.figure.bbox.x) * scale,
                             height: (pendingFigureSelection.figure.bbox.y2 - pendingFigureSelection.figure.bbox.y) * scale,
-                            pointerEvents: 'none',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                      )}
-
-                      {editMode && drawing && drawing.pageNum === pageNum && (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            left: Math.min(drawing.startX, drawing.curX),
-                            top: Math.min(drawing.startY, drawing.curY),
-                            width: Math.abs(drawing.curX - drawing.startX),
-                            height: Math.abs(drawing.curY - drawing.startY),
-                            border: '2px dashed #1565c0',
-                            backgroundColor: 'rgba(21,101,192,0.1)',
                             pointerEvents: 'none',
                             boxSizing: 'border-box',
                           }}
@@ -721,49 +551,6 @@ function App() {
                   )
                 })}
               </Document>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {pendingFigure && (
-        <div
-          className="figure-dialog-overlay"
-          onClick={e => { if (e.target === e.currentTarget) setPendingFigure(null) }}
-        >
-          <div className="figure-dialog">
-            <h3>Add Figure</h3>
-            <p className="figure-dialog-meta">
-              Page {pendingFigure.page} | ({pendingFigure.bbox.x}, {pendingFigure.bbox.y}) - ({pendingFigure.bbox.x2}, {pendingFigure.bbox.y2})
-            </p>
-            <label className="figure-dialog-label">
-              Label
-              <input
-                value={editLabel}
-                onChange={e => setEditLabel(e.target.value)}
-                placeholder="e.g. Figure 1"
-                autoFocus
-                onKeyDown={e => e.key === 'Enter' && confirmAddFigure()}
-              />
-            </label>
-            <label className="figure-dialog-label">
-              Description <span className="optional-label">(included in the prompt)</span>
-              <textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                placeholder="e.g. Coordinate plane with points A, B, C plotted"
-                rows={3}
-              />
-            </label>
-            <div className="figure-dialog-buttons">
-              <button onClick={() => setPendingFigure(null)}>Cancel</button>
-              <button
-                className="btn-confirm"
-                onClick={confirmAddFigure}
-                disabled={!editLabel.trim()}
-              >
-                Add
-              </button>
             </div>
           </div>
         </div>
