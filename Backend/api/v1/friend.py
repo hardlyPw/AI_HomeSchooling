@@ -19,6 +19,16 @@ class FriendState(BaseModel):
     message_count: int
 
 
+class FriendHistoryMessage(BaseModel):
+    role: str
+    text: str
+
+
+class FriendHistory(BaseModel):
+    affinity: int
+    messages: list[FriendHistoryMessage]
+
+
 @router.get("/state", response_model=FriendState)
 def state():
     return FriendState(
@@ -27,10 +37,28 @@ def state():
     )
 
 
+@router.get("/history", response_model=FriendHistory)
+def history():
+    return FriendHistory(
+        affinity=friend_service.affinity,
+        messages=[
+            FriendHistoryMessage(role=str(item.get("role", "")), text=str(item.get("text", "")))
+            for item in friend_service.history
+            if item.get("role") in {"user", "ai", "assistant"} and item.get("text")
+        ],
+    )
+
+
 @router.post("/reset")
 def reset():
     friend_service.reset()
     return {"affinity": friend_service.affinity}
+
+
+@router.post("/debug/cooldown")
+def debug_cooldown():
+    friend_service.force_next_cooldown()
+    return {"ok": True}
 
 
 @router.post("/chat/stream")

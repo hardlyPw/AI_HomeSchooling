@@ -37,12 +37,17 @@ const normalizeMathMarkdown = (markdown: string) => {
     .replace(/\(\s*([abmnrtxy])\s*\)/g, '$$$1$$')
 }
 
-const EXAMPLE_IMAGE_PATHS = [
-  '/assets/Examples/example_1.png',
-  '/assets/Examples/example_3.png',
-  '/assets/Examples/example_6.png',
-  '/assets/Examples/example_7.png',
-]
+const BACKEND_BASE_URL = 'http://localhost:8000'
+const AUTORATER_API_URL = `${BACKEND_BASE_URL}/api/v1/autorater`
+
+const fetchExampleImagePaths = async () => {
+  const response = await fetch(`${AUTORATER_API_URL}/examples`)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const data: { images?: unknown } = await response.json()
+  return Array.isArray(data.images)
+    ? data.images.filter((image): image is string => typeof image === 'string')
+    : []
+}
 
 const LECTURES = [
   {
@@ -116,8 +121,10 @@ function App() {
   const [autoraterLoading, setAutoraterLoading] = useState(false)
   const [exampleInput, setExampleInput] = useState('')
   const [exampleMessages, setExampleMessages] = useState<Message[]>([])
+  const [exampleImagePaths, setExampleImagePaths] = useState<string[]>([])
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0)
-  const [currentExampleImage, setCurrentExampleImage] = useState(EXAMPLE_IMAGE_PATHS[0])
+  const [currentExampleImage, setCurrentExampleImage] = useState('')
+  const [exampleImageError, setExampleImageError] = useState('')
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const pdfPanelRef = useRef<HTMLDivElement>(null)
@@ -200,6 +207,23 @@ function App() {
       reader.onerror = () => reject(reader.error)
       reader.readAsDataURL(blob)
     })
+  }
+
+  const preloadFirstAutoraterExample = async () => {
+    try {
+      const response = await fetch(`${AUTORATER_API_URL}/preload-first`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    } catch (error) {
+      console.error('Error preloading first autorater example:', error)
+    }
+  }
+
+  const formatIsabellaText = (text: string, mode?: string) => {
+    const hasModeLabel = /^\s*\[mode:/i.test(text)
+    const modePrefix = mode && !hasModeLabel ? `[mode: ${mode}] ` : ''
+    return `Isabella: ${modePrefix}${text}`
   }
 
   const captureVideoThumbnail = (src: string) => new Promise<string>((resolve, reject) => {
@@ -305,6 +329,32 @@ function App() {
       .then(r => r.json())
       .then(setFigures)
       .catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    void preloadFirstAutoraterExample()
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    fetchExampleImagePaths()
+      .then(images => {
+        if (cancelled) return
+        setExampleImagePaths(images)
+        setCurrentExampleImage(prev => prev || images[0] || '')
+        setExampleImageError(images.length > 0 ? '' : 'No example images were found.')
+      })
+      .catch(error => {
+        if (!cancelled) {
+          console.error('Failed to load example images:', error)
+          setExampleImageError('Failed to load example images.')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -450,7 +500,7 @@ function App() {
     setExampleMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/autorater/start', {
+      const response = await fetch(`${AUTORATER_API_URL}/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image_b64: imageB64 }),
@@ -460,7 +510,9 @@ function App() {
         throw new Error(`HTTP ${response.status}: ${detail}`)
       }
       const data = await response.json()
-      setExampleMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: `Isabella: ${data.opener}` } : m))
+      setExampleMessages(prev => prev.map(m => (
+        m.id === msgId ? { ...m, text: formatIsabellaText(data.opener, data.mode) } : m
+      )))
       setAutoraterStarted(true)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -474,13 +526,11 @@ function App() {
   }
 
   const startExampleSession = async (exampleIndex: number, resetConversation: boolean) => {
-    const imagePath = EXAMPLE_IMAGE_PATHS[exampleIndex]
-    if (!imagePath) return
+    let imagePaths = exampleImagePaths
 
-    setCurrentExampleIndex(exampleIndex)
-    setCurrentExampleImage(imagePath)
     setAutoraterMode(true)
     setAutoraterStarted(false)
+    setExampleImageError('')
     setShowChat(true)
     setHasOpenedPdf(true)
     setShowPdf(true)
@@ -490,12 +540,41 @@ function App() {
       resetExamplePage()
     }
 
+    if (imagePaths.length === 0) {
+      setAutoraterLoading(true)
+      try {
+        imagePaths = await fetchExampleImagePaths()
+        setExampleImagePaths(imagePaths)
+        setExampleImageError(imagePaths.length > 0 ? '' : 'No example images were found.')
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        console.error('Error loading examples:', msg)
+        setExampleImageError(`Failed to load examples: ${msg}`)
+        setExampleMessages(prev => [...prev, { role: 'assistant', text: `Failed to load examples: ${msg}` }])
+        setAutoraterLoading(false)
+        return
+      }
+      setAutoraterLoading(false)
+    }
+
+    const imagePath = imagePaths[exampleIndex]
+    if (!imagePath) {
+      setExampleImageError('No example image was found for this step.')
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: 'No example images were found.' }])
+      return
+    }
+
+    setCurrentExampleIndex(exampleIndex)
+    setCurrentExampleImage(imagePath)
+    setExampleImageError('')
+
     try {
       const imageB64 = await loadImageAsDataUrl(imagePath)
       await startAutoraterSession(imageB64, `Loading Example ${exampleIndex + 1}...`)
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       console.error('Error loading example:', msg)
+      setExampleImageError(`Failed to prepare example: ${msg}`)
       setExampleMessages(prev => [...prev, { role: 'assistant', text: `Failed to load example: ${msg}` }])
       setAutoraterLoading(false)
     }
@@ -510,7 +589,7 @@ function App() {
     setAutoraterLoading(true)
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/autorater/chat', {
+      const response = await fetch(`${AUTORATER_API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageText }),
@@ -518,13 +597,16 @@ function App() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const data = await response.json()
 
-      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.reply}` }])
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: formatIsabellaText(data.reply, data.mode) }])
       if (data.next_opener) {
-        setExampleMessages(prev => [...prev, { role: 'assistant', text: `Isabella: ${data.next_opener}` }])
+        setExampleMessages(prev => [...prev, {
+          role: 'assistant',
+          text: formatIsabellaText(data.next_opener, data.next_mode),
+        }])
       }
       if (data.is_done) {
         const nextExampleIndex = currentExampleIndex + 1
-        if (nextExampleIndex < EXAMPLE_IMAGE_PATHS.length) {
+        if (nextExampleIndex < exampleImagePaths.length) {
           await startExampleSession(nextExampleIndex, false)
         } else {
           setAutoraterStarted(false)
@@ -668,7 +750,7 @@ function App() {
     setAutoraterLoading(false)
     resetExamplePage()
     setCurrentExampleIndex(0)
-    setCurrentExampleImage(EXAMPLE_IMAGE_PATHS[0])
+    setCurrentExampleImage(exampleImagePaths[0] || '')
     setShowChat(false)
     setShowPdf(false)
     setAppMode('friend')
@@ -834,7 +916,7 @@ function App() {
             </button>
           )}
 
-          <div className="pdf-section" ref={pdfContainerRef} onMouseUp={handleMouseUp}>
+          <div className="pdf-section" ref={pdfContainerRef} onMouseUp={autoraterMode ? undefined : handleMouseUp}>
             <div
               className="pdf-scroll"
               ref={pdfScrollRef}
@@ -908,7 +990,24 @@ function App() {
           <div className="chat-view">
             {autoraterMode && (
               <div className="autorater-example-preview">
-                <img src={currentExampleImage} alt={`Example ${currentExampleIndex + 1}`} />
+                <div className="autorater-example-title">Example {currentExampleIndex + 1}</div>
+                {currentExampleImage ? (
+                  <img
+                    src={currentExampleImage}
+                    alt={`Example ${currentExampleIndex + 1}`}
+                    onLoad={() => setExampleImageError('')}
+                    onError={() => setExampleImageError('This example image could not be displayed.')}
+                  />
+                ) : (
+                  <div className="autorater-example-placeholder">
+                    Loading example image...
+                  </div>
+                )}
+                {exampleImageError && (
+                  <div className="autorater-example-error">
+                    {exampleImageError}
+                  </div>
+                )}
               </div>
             )}
             <div className="chat-window" ref={scrollRef}>

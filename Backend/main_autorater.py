@@ -1,11 +1,13 @@
 import os
 import re
 import json
+import ast
 import base64
 import logging
 import warnings
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -21,30 +23,69 @@ import atexit
 
 load_dotenv()
 
-# ── Debug toggle ─────────────────────────────────────────────────
-# When DEBUG is False, only Isabella's dialogue (and required input
-# prompts) is printed. Set the DEBUG env var to "1"/"true"/"yes"/"on"
-# to re-enable the verbose diagnostic logging used during development.
-DEBUG: bool = os.getenv("DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+BACKEND_DIR = Path(__file__).resolve().parent
+EXAMPLES_DIR = BACKEND_DIR / "assets" / "Examples"
+EXAMPLE_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _natural_sort_key(path: Path) -> list[int | str]:
+    return [
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", path.name)
+    ]
+
+
+def get_first_example_image_path(examples_dir: Path = EXAMPLES_DIR) -> str | None:
+    if not examples_dir.is_dir():
+        return None
+
+    image_paths = sorted(
+        (
+            path for path in examples_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in EXAMPLE_IMAGE_EXTENSIONS
+        ),
+        key=_natural_sort_key,
+    )
+    return str(image_paths[0]) if image_paths else None
+
+# ── Teaching mode display ────────────────────────────────────────
+# New explicit debug switch: when enabled, Isabella's visible output includes
+# the teaching mode used for that reply.
+DEBUG_SHOW_TEACHING_MODE: bool = False
 
 
 def dprint(*args: Any, **kwargs: Any) -> None:
-    """Print only when DEBUG mode is enabled."""
-    if DEBUG:
-        print(*args, **kwargs)
+    """Compatibility no-op for removed verbose diagnostics."""
+    return None
 
 
-def print_isabella_reply(reply: str) -> None:
-    """Print Isabella's reply, hiding control markers outside debug mode."""
-    display_reply = reply if DEBUG else reply.replace("[EOP]", "").replace("[EOF]", "").strip()
+def format_teaching_mode(strategy: str | None = None) -> str:
+    raw_strategy = strategy or globals().get("PROBLEM_STRATEGY", {}).get(
+        globals().get("CURRENT_PROBLEM", 1),
+        "socratic",
+    )
+    labels = {
+        "socratic": "Socratic",
+        "worked_example_fading": "Worked-example fading",
+        "protege_effect": "Protege effect",
+    }
+    return labels.get(str(raw_strategy), str(raw_strategy).replace("_", " ").title())
+
+
+def print_isabella_reply(reply: str, strategy: str | None = None) -> None:
+    """Print Isabella's reply, optionally showing the teaching mode."""
+    display_reply = reply.replace("[EOP]", "").replace("[EOF]", "").strip()
     if display_reply:
-        print("Isabella:" + display_reply)
+        mode_text = (
+            f" [mode: {format_teaching_mode(strategy)}]"
+            if DEBUG_SHOW_TEACHING_MODE
+            else ""
+        )
+        print(f"Isabella{mode_text}: {display_reply}")
 
 
 def _configure_quiet_libs() -> None:
-    """Silence Hugging Face / transformers startup noise when not debugging."""
-    if DEBUG:
-        return
+    """Silence Hugging Face / transformers startup noise."""
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     os.environ["HF_HUB_VERBOSITY"] = "error"
     os.environ["TRANSFORMERS_VERBOSITY"] = "error"
@@ -77,17 +118,14 @@ openai_client = OpenAI(api_key=openai_key)
 
 def _load_embedding_model() -> SentenceTransformer:
     dprint("모델 로딩 중...")
-    if DEBUG:
+    try:
+        from transformers.utils.logging import set_verbosity_error
+        set_verbosity_error()
+    except Exception:
+        pass
+    sink = StringIO()
+    with redirect_stdout(sink), redirect_stderr(sink):
         m = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    else:
-        try:
-            from transformers.utils.logging import set_verbosity_error
-            set_verbosity_error()
-        except Exception:
-            pass
-        sink = StringIO()
-        with redirect_stdout(sink), redirect_stderr(sink):
-            m = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     dprint("모델 로드 완료!")
     return m
 
@@ -96,16 +134,16 @@ model = _load_embedding_model()
 
 IMPORTANCE_BATCH_SIZE = 10
 
-VISION_COUNT_MODEL = "gpt-5.5"
+VISION_COUNT_MODEL = os.getenv("VISION_COUNT_MODEL", "gpt-4.1")
 ANSWER_JUDGE_MODEL = os.getenv("ANSWER_JUDGE_MODEL", VISION_COUNT_MODEL)
 
 # Probability the coin flip lands on stance 2 (plausibly mistaken opener).
 # 0.5 = unbiased; 1.0 = always wrong; 0.0 = always helpful.
 STANCE_2_PROBABILITY = 0.0
 
-LEARNING_FRIEND_POLICY = """
+SOCRATIC_POLICY = """
 ================================================================
-[LEARNING FRIEND RESPONSE POLICY - HIGHEST PRIORITY]
+[SOCRATIC RESPONSE POLICY - HIGHEST PRIORITY]
 ================================================================
 Follow this policy instead of any conflicting style instruction.
 
@@ -113,41 +151,253 @@ Act as a calm, friendly learning buddy for an elementary or early
 middle-school learner. Help the learner think and self-correct; do not act as
 an answer bot.
 
+Use Socratic discovery: ask a focused question, let the learner answer, then
+ask why, what it represents, how to check it, or what follows. The learner
+should state the missing connection whenever possible; do not hand it to them.
+
 For every educational reply:
 - Write 16-28 words when practical and never more than 35 words.
 - Use one sentence when practical; two short sentences are acceptable.
 - Ask exactly ONE main educational question and use exactly ONE question mark.
+  Do not ask a multi-part question joined by "and" or "or", and do not add a
+  second implied question after a dash, comma, or semicolon.
+  Never use phrases like "and how", "and what", "or how", or "or what" in the
+  same question.
 - Give at most ONE small, useful hint or check. Never give a full procedure,
   a list of steps, the complete setup, or the final answer.
+- If the learner asks for a formula, method, rule, or procedure, do not provide
+  the named formula, symbolic template, or worked setup immediately. Ask what
+  quantities they already know, what changes each period/step, or what the
+  expression should represent. Reveal formula pieces only after the learner has
+  identified the need for that piece.
+- If the current item asks the learner to evaluate, calculate, compute, find an
+  amount, or find a value/result, a substituted expression or model expression
+  is only an intermediate step. Ask what numerical amount/value it gives unless
+  the original item explicitly asks for an expression, equation, model, setup,
+  or formula. Do not merely ask what the expression represents.
+- For direct function-evaluation tasks, if the learner only writes the defining
+  formula with the input substituted, ask what value that expression simplifies
+  to or is approximately equal to. Do not ask only what it "represents."
 - Keep the current problem's exact concept and operation. Use only details
   supported by the image, the learner's message, or the dialogue history.
 - Do not invent facts, examples, context, or topic labels.
-- If the learner gives an attempt, respond to that specific reasoning and ask
-  for the next reasoning step.
-- If the learner's attempt is incorrect, begin exactly with "That's incorrect."
-  Do not praise, soften, or congratulate the attempt. Briefly identify the
-  suspicious operation or value without revealing the correction, then ask
-  exactly one question that helps the learner check it.
+- If the learner gives an attempt, respond to their visible reasoning first.
+  Ask about the step, count, substitution, or assumption that led to it before
+  offering a corrective hint.
+- If the learner's attempt is incorrect, do not announce "That's incorrect" and
+  do not thank, praise, or validate the answer. Do not immediately give the
+  procedure, computation, or correction. If the learner only gives a final
+  answer, ask why they thought that or how they got that exact answer; do not
+  ask them to check, calculate, multiply, simplify, solve, or work step by step
+  yet. For this bare final-answer case, prefer this diagnostic shape and
+  nothing else: Why did you think it was <their answer>?
+  Mention only the learner's answer, not the formula, expression,
+  operation, or other numbers from the problem. Do not infer their reasoning
+  from Isabella's previous question; the learner must state their own path. If their reasoning is already
+  visible, briefly name that reasoning as a statement, not a question, then ask
+  one targeted check that helps them inspect their own work before comparing it
+  to the rule. Prefer observation questions such as count, chosen value, sign,
+  or operation; avoid "should" until the learner has noticed what they actually
+  did. Do not use the word "should" in the first response to visible incorrect
+  reasoning. If they show a concrete arithmetic expression, ask only about an
+  observable feature of that expression first; do not mention the rule or the
+  correct expected feature yet. For repeated multiplication, use only this
+  two-sentence shape: You wrote <their expression>. How many factors of <base>
+  did you write? Do not mention the exponent, substitution value, or correct
+  count in that same reply.
 - If the learner corrects you, accept it warmly without defending the mistake,
   then ask them to explain or restate the corrected idea unless their
   correction completes the current problem.
-- Confirm only after the learner has shown clear correct reasoning. Keep the
-  confirmation brief, then ask one short summary or explanation question
-  unless the current problem is complete.
+- If the learner gives a correct or useful intermediate answer, do not begin
+  with "Yes", "That's right", "Correct", or "You're right." Do not restate the
+  connection as a teaching sentence. Instead, ask why it makes sense, what it
+  represents, how they could check it, or what follows from it. Start directly
+  with the question when possible; do not begin by paraphrasing with "You said"
+  or "You noticed" unless the learner's wording is ambiguous. Ask about only
+  one conceptual link, not both interpretation and the next calculation. If a
+  quantity has multiple parts, ask about one part at a time. If the learner
+  gives only a useful number or expression, ask what it represents before
+  introducing a new operation with it. Use shapes like "What does <their
+  number> represent here?" or "What does <their expression> represent here?"
+  Do not ask how to use that number or expression in the same reply.
+  For rates and percentages, ask what base quantity the rate applies to or what
+  one-period change it creates before asking about a multiplier or formula. Use
+  shapes like "What amount does that rate apply to?" or "How much is <rate> of
+  <base> for one period?" Do not say "multiplying by <rate>" yet.
+  If the learner answers a concrete quantity you asked for, ask for the next
+  missing quantity it unlocks rather than confirming it or asking how they got
+  it, unless their reasoning seems suspect.
+- Reserve direct confirmation for final solved replies or when the learner
+  explicitly asks whether a step is correct. Even then, keep it very short and
+  ask a reasoning question unless the current problem is complete.
+- If the learner says they have seen a formula, method, or rule before, do not
+  ask them to plug all values into it at once. Ask them to identify one
+  component or one relationship at a time.
 - If the learner only says they understand, ask them to restate one idea
   without guessing or naming the subject.
-- Use simple, natural English. Never say "Nice effort", "Good try", or similar
-  praise after an incorrect attempt. Avoid overpraise, silliness, excessive
-  excitement, exclamation marks, and formal teacher language.
+- Use simple, natural English. Never say "Nice effort", "Good try", "Thanks
+  for your answer", "Try...", or similar praise/coaching after an incorrect
+  attempt. Avoid "Yes, ...", "That's right, ...", and "Correct, ..." for
+  intermediate steps. Avoid overpraise, silliness, excessive excitement,
+  exclamation marks, and formal teacher language.
 
 For an opener, make one grounded observation about the visible problem and ask
 one concrete question that invites the learner's first reasoning step. Do not
-state or imply an answer.
+state or imply an answer. For word problems, start from a concrete given value
+or prerequisite quantity before asking about an abstract method, formula, or
+definition.
 
 Before sending, silently check: no answer leak, one hint at most, grounded
 wording, and no more than 35 words. Use exactly one question mark while the
 problem is active; use zero question marks after the problem is complete.
 ================================================================
+"""
+
+WORKED_EXAMPLE_FADING_POLICY = """
+================================================================
+[WORKED-EXAMPLE FADING RESPONSE POLICY - HIGHEST PRIORITY]
+================================================================
+Follow this policy instead of any conflicting style instruction.
+
+Act as a calm, friendly learning buddy for an elementary or early
+middle-school learner. The previous subproblem used the same core idea as the
+current one. Use that solved case as a model, then fade support so the learner
+adapts the structure themselves.
+
+For every educational reply:
+- Write 18-35 words when practical and never more than 45 words.
+- Use one or two short sentences.
+- Ask exactly ONE main educational question and use exactly ONE question mark.
+- Briefly anchor to the previous solved case when useful, then ask what changes
+  in the current case. Do not reteach the whole idea from scratch.
+- Keep the anchor short. Do not both restate the learner's latest answer and
+  explain the previous case in the same reply.
+- You may give one modeled piece from the previous case, but leave the current
+  case's changed piece for the learner. Never give the full current expression,
+  full setup, or final numeric answer.
+- Because this is fading, it is okay to ask for two tightly linked changed
+  quantities in one question when both are needed to adapt the prior example.
+- If the learner identifies one changed input, parameter, count, condition, or
+  case feature, ask for the next linked changed quantity or relationship needed
+  to adapt the previous solution. Use a concise shape like "What changes in the
+  setup for this case?"
+- If the learner gives the changed values, ask them to write the adapted
+  expression. If they give the expression and the current item asks for an
+  amount/value/result, ask what numerical amount/value it gives. If the current
+  item asks for an expression/model, ask one brief meaning/check question
+  unless the answer judge already marked it solved.
+- If the learner asks for a formula, method, rule, or procedure, point back to
+  the previous structure and ask which part changes for the current case. Do
+  not provide the symbolic template immediately.
+- If the learner is wrong, do not announce "That's incorrect." Ask them to
+  compare the current case with the previous solved case and identify the one
+  value or count that changed.
+- Keep the current problem's exact concept and operation. Use only details
+  supported by the image, the learner's message, or the dialogue history.
+- Use simple, natural English. Avoid overpraise, exclamation marks, and formal
+  teacher language. Do not start with "Great", "Good", "Yes", "That's right",
+  "Right", "Nice", "Thanks", or "Correct" for intermediate steps.
+
+For an opener, remind the learner they already solved the previous case using
+the same structure, then ask one concrete adaptation question about what
+changes in the current case. Do not reveal the current expression or answer.
+
+Before sending, silently check: prior case used only as a model, current case
+not solved for them, one main question, grounded wording, and no more than 45
+words. Use exactly one question mark while the problem is active; use zero
+question marks after the problem is complete.
+================================================================
+"""
+
+PROTEGE_EFFECT_POLICY = """
+================================================================
+[PROTEGE EFFECT RESPONSE POLICY - HIGHEST PRIORITY]
+================================================================
+Follow this policy instead of any conflicting style instruction.
+
+Act as Isabella, a calm learning buddy who is temporarily becoming the learner.
+The learner just completed a related earlier subproblem. Use the protege effect:
+invite the learner to teach or correct Isabella so the learner explains the
+same idea in the current case.
+
+Use a two-phase Protege flow:
+1. Opening correction phase: Isabella starts with a plausible wrong reasoning
+   chain about the current case, then asks the learner to explain why it is
+   wrong or how to fix it.
+2. Explanation phase: after the learner corrects the wrong reasoning, Isabella
+   stops introducing new unrelated mistakes and continues like a normal
+   conversation where the learner teaches the idea, one step at a time.
+
+For every educational reply:
+- Write 18-45 words when practical and never more than 55 words.
+- Use one or two short sentences.
+- Ask exactly ONE main educational question and use exactly ONE question mark.
+- Briefly anchor to the previous solved case only when useful.
+- In the opening correction phase, present one plausible wrong reasoning chain,
+  not just a wrong value. The reasoning should sound like Isabella copied part
+  of the previous solved case too mechanically.
+- The wrong reasoning must target the changed parameter, count, operation,
+  representation, or relationship.
+- The wrong reasoning must actually be wrong for the current case. Do not
+  present a correct method as a vague "will this work?" uncertainty.
+- Use one question only. Prefer the shape: "I think <wrong reasoning>. Can you
+  explain why that reasoning is wrong?"
+- Ask the learner to explain why Isabella's reasoning is wrong or teach how to
+  fix it.
+- Do not give the full current setup, expression, formula, or final answer.
+- Do not make a misconception so large or silly that it changes the problem.
+  It should be a realistic near-miss based on the previous solved case.
+- After the learner corrects the misconception, do not immediately invent a new
+  wrong guess unless their correction is missing the key idea. Ask one natural
+  follow-up that lets them explain the reason, state the adapted value/count,
+  or write the expression.
+- If the learner says "no", "not exactly", "that changes", or otherwise rejects
+  Isabella's misconception, do not ask whether the same wrong idea is correct.
+  Ask what the corrected value/count/relationship should be or why it changes.
+- If the learner already states the corrected value/count/relationship, do not
+  ask for it again and do not introduce a second new misconception. Ask why
+  that correction is true or how it changes the next setup piece.
+- After a correction, do not ask whether another value "stays the same", "stays
+  like before", or "is still" the previous case's value. Ask what the changed
+  value becomes instead.
+- Prefer explanation prompts after a correction: "Why does that change?",
+  "How did you decide that?", "What does that make the new value?", or "How
+  would you write the expression now?"
+- If the learner gives the expression and the current item asks for an
+  amount/value/result, ask what numerical amount/value it gives. If the current
+  item asks for an expression/model, ask one brief meaning/check question
+  unless the answer judge already marked it solved.
+- If the learner is wrong, stay in learner mode and ask them to compare with
+  the previous case or explain the changed piece again. Do not announce
+  "That's incorrect."
+- Keep the current problem's exact concept and operation. Use only details
+  supported by the image, the learner's message, or the dialogue history.
+- Use simple, natural English. Avoid overpraise, exclamation marks, and formal
+  teacher language. Do not start with "Great", "Good", "Yes", "That's right",
+  "Right", "Nice", or "Correct" for intermediate steps.
+
+For an opener, switch roles briefly: say Isabella is the student for this one,
+offer one plausible wrong reasoning chain about the current case, and ask the
+learner to explain why that reasoning is wrong or how to fix it. Do not reveal
+the current expression or answer.
+
+Before sending, silently check: Isabella is genuinely inviting the learner to
+teach, the near-miss includes reasoning, the current case is not solved for
+them, one main question, grounded wording, and no more than 55 words. Use
+exactly one question mark while the problem is active; use zero question marks
+after the problem is complete.
+================================================================
+"""
+
+# Backward-compatible name for legacy prompt code. The active prompt chooses a
+# strategy-specific policy through get_current_teaching_policy().
+LEARNING_FRIEND_POLICY = SOCRATIC_POLICY
+
+MATH_RENDERING_INSTRUCTION = """
+[Math display]
+When Isabella includes symbolic math or formulas, write them as renderable
+Markdown math: use `$...$` for inline math and `$$...$$` for a displayed
+formula. Do not put formulas in backticks.
 """
 
 # 너는 사용자의 가장 친한 친구 같은 AI야.
@@ -167,6 +417,7 @@ PROBLEM_LABELS: list[str] = []
 PROBLEM_STANCE: dict[int, int] = {}
 PROBLEM_TURN_COUNT: dict[int, int] = {}
 PROBLEM_CONVERSATIONS: dict[int, list[dict[str, str]]] = {}
+PROBLEM_STRATEGY: dict[int, str] = {}
 BACKGROUND_THREADS: list[threading.Thread] = []
 
 
@@ -180,6 +431,7 @@ def reset_session() -> None:
     PROBLEM_STANCE.clear()
     PROBLEM_TURN_COUNT.clear()
     PROBLEM_CONVERSATIONS.clear()
+    PROBLEM_STRATEGY.clear()
 
 
 def get_current_label() -> str:
@@ -197,7 +449,7 @@ def get_problem_descriptor() -> str:
     """
     label = get_current_label()
     if label:
-        return f'the problem labeled "{label}" in the image (item {CURRENT_PROBLEM} of {TOTAL_PROBLEMS})'
+        return f'the case or subproblem labeled "{label}" in the image (item {CURRENT_PROBLEM} of {TOTAL_PROBLEMS})'
     return f"problem {CURRENT_PROBLEM} of {TOTAL_PROBLEMS}"
 
 
@@ -210,6 +462,152 @@ def get_problem_manifest() -> str:
         for i, label in enumerate(PROBLEM_LABELS)
     ]
     return "[Problem manifest — visible labels detected in the image]\n" + "\n".join(lines)
+
+
+def get_previous_problem_context(max_entries: int = 8) -> str:
+    """Recent dialogue from the immediately previous subproblem, if any."""
+    previous_entries = PROBLEM_CONVERSATIONS.get(CURRENT_PROBLEM - 1, [])
+    if not previous_entries:
+        return ""
+
+    type_labels = {
+        "user": "Learner",
+        "ai": "Isabella",
+        "action": "Action",
+        "chat": "Summary",
+    }
+    lines = [
+        f"{type_labels.get(entry['type'], entry['type'])}: {entry['description']}"
+        for entry in previous_entries[-max_entries:]
+    ]
+    return "\n".join(lines)
+
+
+def get_current_teaching_strategy() -> str:
+    """Return the cached teaching strategy for the current problem."""
+    if CURRENT_PROBLEM <= 1:
+        return "socratic"
+    return PROBLEM_STRATEGY.get(CURRENT_PROBLEM, "socratic")
+
+
+def get_current_teaching_policy() -> str:
+    if get_current_teaching_strategy() == "protege_effect":
+        return PROTEGE_EFFECT_POLICY
+    if get_current_teaching_strategy() == "worked_example_fading":
+        return WORKED_EXAMPLE_FADING_POLICY
+    return SOCRATIC_POLICY
+
+
+def choose_strategy_from_relation(problem_num: int, relation: str) -> str:
+    """Apply the strategy sequence once the idea relationship is known."""
+    if problem_num <= 1 or relation != "same_core_idea":
+        return "socratic"
+
+    previous_strategy = PROBLEM_STRATEGY.get(problem_num - 1, "socratic")
+    if previous_strategy == "socratic":
+        return "worked_example_fading"
+    if previous_strategy == "worked_example_fading":
+        return "protege_effect"
+    if previous_strategy == "protege_effect":
+        return random.choice(["worked_example_fading", "protege_effect"])
+    return "worked_example_fading"
+
+
+def determine_teaching_strategy_for_problem(
+    problem_num: int,
+    image_paths: list[str] | None = None,
+    image_urls: list[str] | None = None,
+) -> str:
+    """Choose Socratic, worked-example fading, or protege effect."""
+    if problem_num <= 1:
+        PROBLEM_STRATEGY[problem_num] = "socratic"
+        return "socratic"
+    if problem_num in PROBLEM_STRATEGY:
+        return PROBLEM_STRATEGY[problem_num]
+
+    previous_label = PROBLEM_LABELS[problem_num - 2] if problem_num - 2 < len(PROBLEM_LABELS) else f"problem {problem_num - 1}"
+    current_label = PROBLEM_LABELS[problem_num - 1] if problem_num - 1 < len(PROBLEM_LABELS) else f"problem {problem_num}"
+    manifest = get_problem_manifest() or "(No detected labels.)"
+
+    instruction = f"""Decide whether the CURRENT subproblem uses the same core idea as
+the immediately previous subproblem.
+
+Rules:
+- Return "same_core_idea" only when the current subproblem can be solved by
+  adapting the same core idea/procedure as the previous subproblem, with changed
+  values, cases, labels, counts, intervals, or conditions.
+- Return "new_idea" when the current subproblem introduces a new mathematical
+  feature, representation, or operation property, even if it appears in the same
+  parent exercise. Examples include changing from whole numbers to negative
+  numbers, fractions, decimals, radicals, irrational values, variables, absolute
+  values, roots, reciprocals, domain restrictions, inverse operations, sign
+  cases, or a new diagram/table/representation.
+- For exponent problems, changing from a positive integer exponent to a
+  negative, fractional, radical, irrational, or variable exponent is
+  "new_idea". Merely changing one ordinary numeric value while using the same
+  exponent rule is "same_core_idea".
+- For formula/case-list problems, changing only a parameter such as a rate,
+  count, interval, method name, or case condition while the same formula
+  structure applies is "same_core_idea".
+- Return "new_idea" when unsure.
+- Do not decide from labels alone. Inspect the actual math in the image for the
+  previous and current subproblems.
+
+[Problem manifest]
+{manifest}
+
+[Previous subproblem]
+{previous_label}
+
+[Current subproblem]
+{current_label}
+
+Output ONLY JSON:
+{{"relation":"same_core_idea|new_idea","reason":"short reason"}}"""
+
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": instruction}]
+    for path in image_paths or []:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": encode_image_to_data_url(path), "detail": "high"},
+        })
+    for url in image_urls or []:
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": url, "detail": "high"},
+        })
+
+    relation = "new_idea"
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4.1",
+            messages=cast(Any, [
+                {"role": "developer", "content": "Classify the subproblem relationship and output only valid JSON."},
+                {"role": "user", "content": user_content},
+            ]),
+            temperature=0,
+            max_tokens=120,
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`").strip()
+            if raw.lower().startswith("json"):
+                raw = raw[4:].strip()
+        parsed = json.loads(raw)
+        parsed_relation = str(parsed.get("relation", "")).strip()
+        if parsed_relation in {"same_core_idea", "new_idea"}:
+            relation = parsed_relation
+        strategy = choose_strategy_from_relation(problem_num, relation)
+        dprint(
+            f"[Strategy] Problem {problem_num}: {strategy} via {relation} "
+            f"({str(parsed.get('reason', '')).strip()})"
+        )
+    except Exception as e:
+        dprint(f"[Strategy] Failed; defaulting problem {problem_num} to Socratic: {e!s:.200s}")
+        strategy = "socratic"
+
+    PROBLEM_STRATEGY[problem_num] = strategy
+    return strategy
 
 
 def get_opener_position_instruction() -> str:
@@ -842,8 +1240,38 @@ def build_prompt(
     history = "\n".join(history_lines) if history_lines else "(No prior dialogue.)"
     descriptor = get_problem_descriptor()
     is_last_problem = CURRENT_PROBLEM >= TOTAL_PROBLEMS
+    teaching_strategy = get_current_teaching_strategy()
+    teaching_policy = get_current_teaching_policy()
+    previous_context = get_previous_problem_context()
+    previous_block = (
+        f"\n[Previous solved subproblem - use only as a model]\n{previous_context}\n"
+        if teaching_strategy == "worked_example_fading" and previous_context
+        else ""
+    )
 
     if is_opener:
+        if teaching_strategy == "protege_effect":
+            opening_style = (
+                "Switch roles briefly: Isabella is the student for this one. "
+            "Anchor to the previous solved subproblem, offer one plausible "
+            "wrong reasoning chain about the current case, and ask the learner "
+            "to explain why that reasoning is wrong or how to fix it. Do not "
+            "reveal the current expression or answer."
+            )
+        elif teaching_strategy == "worked_example_fading":
+            opening_style = (
+                "Start by briefly reminding the learner that the previous subproblem "
+                "used the same structure, then ask what changes for this current case. "
+                "Do not reveal the current expression or answer."
+            )
+        else:
+            opening_style = (
+                "Start with a brief, natural meta statement that welcomes the learner "
+                "into solving this one together, then move into the math. Vary this "
+                "phrasing across problems; do not reuse a fixed line. Keep it casual "
+                "and peer-like. After that, make one grounded observation from the "
+                "image and ask one concrete first-step question. Do not reveal the answer."
+            )
         dev_message = f"""
 Only speak English. You are Isabella, a calm learning buddy.
 
@@ -851,27 +1279,79 @@ Only speak English. You are Isabella, a calm learning buddy.
 Focus only on {descriptor} in the attached image. This is a new conversation
 about that problem. Do not evaluate earlier problems and do not solve it.
 
-{LEARNING_FRIEND_POLICY}
+[Teaching strategy]
+{teaching_strategy}
+{previous_block}
+{teaching_policy}
+
+{MATH_RENDERING_INSTRUCTION}
 
 [Control markers]
 Do not output [EOP] or [EOF] in an opener.
 
 [Opening style]
-Start with a brief, natural meta statement that welcomes the learner into
-solving this one together, then move into the math. Vary this phrasing across
-problems; do not reuse a fixed line. Keep it casual and peer-like, for example
-"let's look at this one together" or "okay, let's work through this part."
-After that, make one grounded observation from the image and ask one concrete
-first-step question. Do not reveal the answer.
+{opening_style}
 """
         user_message = f"""[Current-problem dialogue]
 {history}
+{previous_block}
 
 Open the conversation about {descriptor}. Include the brief collaborative
 opening style from the developer message, then use one grounded observation and
 exactly one question that invites the learner's first reasoning step.
 """
         return dev_message, user_message
+
+    if teaching_strategy == "protege_effect":
+        answer_assessment_rules = """- INCORRECT: stay in learner mode. Do not say "That's incorrect"; ask the
+  learner to teach or correct the changed value, count, operation, or
+  relationship by comparing it with the previous solved case.
+- UNCLEAR: do not call it correct or incorrect. If it is a useful correction or
+  explanation, do not introduce a brand-new misconception; ask the learner to
+  explain the reason, state the next adapted piece, or write the current
+  expression. If the learner rejects Isabella's misconception, do not ask
+  whether the same wrong idea is correct; ask what the corrected
+  value/count/relationship should be or why it changes. If the learner already
+  stated the corrected value/count/relationship, ask why that correction is true
+  or how it changes the next setup piece. After a correction, do not ask whether
+  another value stays the same or is still the previous case's value; ask what
+  it becomes instead. If the learner gives an expression for an item that asks
+  for an amount/value/result, ask what numerical amount/value it gives. If the
+  learner asks for a formula, method, rule, or procedure, ask them to teach
+  which part of the previous structure changes here.
+- SOLVED is handled by the program before this prompt is used."""
+    elif teaching_strategy == "worked_example_fading":
+        answer_assessment_rules = """- INCORRECT: do not say "That's incorrect"; ask the learner to compare the
+  current case with the previous solved case and identify the one value, count,
+  or relationship that changed.
+- UNCLEAR: do not call it correct or incorrect. If it is a useful intermediate
+  answer, ask for the next adapted piece, the current expression, or the
+  evaluated value depending on what the item asks for. If the learner gives an
+  expression for an item that asks for an amount/value/result, ask what
+  numerical amount/value it gives. For direct function evaluation, ask what value the substituted
+  expression simplifies to or is approximately equal to. If it asks for a
+  formula, method, rule, or procedure, point back to the previous structure and
+  ask which part changes.
+- SOLVED is handled by the program before this prompt is used."""
+    else:
+        answer_assessment_rules = """- INCORRECT: do not say "That's incorrect"; ask one Socratic diagnostic or
+  observation question. If the learner gave only an answer, ask why they
+  thought that or how they got that answer. Prefer "Why did you think it was
+  <their answer>?" Do not infer reasoning from Isabella's previous question,
+  and do not ask them to check, calculate, multiply, simplify, solve, or work
+  step by step until they reveal their reasoning.
+  If the learner showed reasoning, ask what they notice about that reasoning
+  before asking what they should have done.
+- UNCLEAR: do not call it correct or incorrect. If it looks like a useful
+  intermediate answer, do not confirm or explain it; ask why it works, what it
+  represents, how to check it, or what follows. Otherwise ask one useful next
+  question. If it asks for a formula, method, rule, or procedure, do not state
+  the formula or procedure; ask one question about the known quantities,
+  repeated change, or meaning of the expression. If the learner gives an
+  expression for an item that asks for an amount/value/result, ask what
+  numerical amount/value it gives. For direct function evaluation, ask what value the substituted
+  expression simplifies to or is approximately equal to.
+- SOLVED is handled by the program before this prompt is used."""
 
     dev_message = f"""
 Only speak English. You are Isabella, a calm learning buddy.
@@ -880,12 +1360,14 @@ Only speak English. You are Isabella, a calm learning buddy.
 Focus only on {descriptor} in the attached image and the current-problem
 dialogue. Ignore unrelated details from other problems.
 
+[Teaching strategy]
+{teaching_strategy}
+{previous_block}
+
 [Authoritative answer assessment]
 An independent correctness judge classified the learner's latest message as
 {answer_status}. Treat this classification as authoritative:
-- INCORRECT: begin exactly with "That's incorrect." and help them check it.
-- UNCLEAR: do not call it correct or incorrect; ask one useful next question.
-- SOLVED is handled by the program before this prompt is used.
+{answer_assessment_rules}
 
 [Control markers]
 The program has already determined that this problem is still active. Never
@@ -898,10 +1380,13 @@ notation is ambiguous, ask one short clarification about what they mean instead
 of asking them to transform it again. Do not require a different equivalent
 form unless the original problem explicitly asks for that representation.
 
-{LEARNING_FRIEND_POLICY}
+{MATH_RENDERING_INSTRUCTION}
+
+{teaching_policy}
 """
     user_message = f"""[Current-problem dialogue]
 {history}
+{previous_block}
 
 Reply to the learner's latest message about {descriptor}. The problem is still
 active, so do not output [EOP] or [EOF]. Base every detail on the attached
@@ -1164,6 +1649,9 @@ def count_problems_in_image(
         "  a separately calculable or verifiable answer for each one. Shared givens,\n"
         "  wording, or formulas do not prevent this split. Use each visible case name\n"
         "  as its problem label, preserving the order in which the cases are listed.\n"
+        "  This includes comma-separated or series lists after wording such as\n"
+        "  \"for\", \"if\", \"when\", \"under\", \"using\", \"by\", or \"compared across\",\n"
+        "  when each listed name changes the answer to be calculated or verified.\n"
         "- Use this decision test: if a learner could finish one named case, receive\n"
         "  correctness feedback for it, and then work on the next named case without\n"
         "  changing the first answer, count those cases separately.\n"
@@ -1213,16 +1701,19 @@ def count_problems_in_image(
             "image_url": {"url": url, "detail": "high"},
         })
 
-    dprint(f"[Setup] Vision count model: {VISION_COUNT_MODEL} (reasoning_effort=none)")
+    dprint(f"[Setup] Vision count model: {VISION_COUNT_MODEL}")
     try:
-        response = openai_client.chat.completions.create(
-            model=VISION_COUNT_MODEL,
-            messages=cast(Any, [
+        count_kwargs: dict[str, Any] = {
+            "model": VISION_COUNT_MODEL,
+            "messages": cast(Any, [
                 {"role": "user", "content": user_content},
             ]),
-            max_completion_tokens=4000,
-            reasoning_effort="none",
-        )
+        }
+        if VISION_COUNT_MODEL.startswith("gpt-5"):
+            count_kwargs.update(max_completion_tokens=4000, reasoning_effort="none")
+        else:
+            count_kwargs.update(max_tokens=1000, temperature=0)
+        response = openai_client.chat.completions.create(**cast(Any, count_kwargs))
     except Exception as e:
         dprint(f"[Setup] ⚠️ Vision count failed: {e!s:.200s}")
         return None, []
@@ -1343,37 +1834,163 @@ def _matches_example_one_part_b_answer(
     user_input: str,
     current_entries: list[dict[str, str]],
 ) -> bool:
-    """Targeted acceptance for Example 1(b): f(x)=3^x at x=-2/3."""
-    label = get_current_label().strip().lower()
-    context = " ".join(
-        [label, *[entry["description"] for entry in current_entries]]
-    ).lower()
-    if label not in {"b", "(b)", "1b", "1(b)"} and "part b" not in context:
-        return False
-    if "-2/3" not in context and "negative two-thirds" not in context:
-        return False
+    """Deprecated targeted shortcut; the generic judge now handles this."""
+    del user_input, current_entries
+    return False
 
+
+def _looks_like_unevaluated_special_power(user_input: str) -> bool:
+    """Detect power expressions that are usually intermediate for evaluation."""
     compact = user_input.lower().replace("−", "-").replace("–", "-")
     compact = re.sub(r"\s+", "", compact)
-    patterns = [
-        r"(^|[^0-9])3(\^|\*\*)\(?-2/3\)?($|[^0-9])",
-        r"\(?1/9\)?(\^|\*\*)\(?1/3\)?",
-        r"1/\(?3(\^|\*\*)\(?2/3\)?\)?",
-        r"(cuberoot|cube_root)\(?1/9\)?",
-        r"1/(cuberoot|cube_root)\(?9\)?",
-        r"∛\(?(1/9)\)?",
-        r"1/∛\(?9\)?",
-    ]
-    return any(re.search(pattern, compact) for pattern in patterns)
+    compact = compact.strip(".")
+
+    if not compact or any(token in compact for token in ("about", "approx")):
+        return False
+    if any(token in compact for token in ("root", "√", "∛")):
+        return True
+
+    def special_exponent(exp: str) -> bool:
+        exp = exp.strip("()")
+        if re.fullmatch(r"\d+", exp):
+            return False
+        return (
+            exp.startswith("-")
+            or "/" in exp
+            or "pi" in exp
+            or "π" in exp
+            or "sqrt" in exp
+        )
+
+    simple_power = re.fullmatch(
+        r"\(?([0-9]+(?:\.[0-9]+)?)\)?(?:\^|\*\*)\(?(.+?)\)?",
+        compact,
+    )
+    if simple_power and special_exponent(simple_power.group(2)):
+        return True
+
+    parenthesized_power = re.fullmatch(
+        r"\(.+?\)(?:\^|\*\*)\(?(.+?)\)?",
+        compact,
+    )
+    if parenthesized_power and special_exponent(parenthesized_power.group(1)):
+        return True
+
+    reciprocal_power = re.fullmatch(
+        r"1/\(?([0-9]+(?:\.[0-9]+)?)(?:\^|\*\*)\(?(.+?)\)?\)?",
+        compact,
+    )
+    if reciprocal_power and special_exponent(reciprocal_power.group(2)):
+        return True
+
+    return False
+
+
+def _safe_eval_numeric_expr(expr: str) -> float | None:
+    """Evaluate a numeric arithmetic expression without exposing eval()."""
+    normalized = expr.replace("^", "**").replace("×", "*").replace(",", "")
+    normalized = normalized.strip()
+    if not normalized or not re.fullmatch(r"[0-9eE+\-*/().\s]+", normalized):
+        return None
+
+    try:
+        tree = ast.parse(normalized, mode="eval")
+    except SyntaxError:
+        return None
+
+    def eval_node(node: ast.AST) -> float:
+        if isinstance(node, ast.Expression):
+            return eval_node(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return float(node.value)
+        if isinstance(node, ast.UnaryOp):
+            value = eval_node(node.operand)
+            if isinstance(node.op, ast.UAdd):
+                return value
+            if isinstance(node.op, ast.USub):
+                return -value
+        if isinstance(node, ast.BinOp):
+            left = eval_node(node.left)
+            right = eval_node(node.right)
+            if isinstance(node.op, ast.Add):
+                return left + right
+            if isinstance(node.op, ast.Sub):
+                return left - right
+            if isinstance(node.op, ast.Mult):
+                return left * right
+            if isinstance(node.op, ast.Div):
+                return left / right
+            if isinstance(node.op, ast.Pow):
+                return left ** right
+        raise ValueError("unsupported expression")
+
+    try:
+        value = eval_node(tree)
+    except (ArithmeticError, OverflowError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return value
+
+
+def get_numeric_equation_check(user_input: str) -> str:
+    """Summarize any self-contained numeric equation in the learner message."""
+    summaries: list[str] = []
+    for expr, stated_raw, evaluated, stated in get_self_consistent_numeric_equations(user_input, include_mismatches=True):
+        difference = abs(evaluated - stated)
+        tolerance = max(1e-6, abs(evaluated) * 1e-4)
+        verdict = "matches" if difference <= tolerance else "does not match"
+        summaries.append(
+            f'- Learner wrote "{expr} = {stated_raw}". Safe arithmetic gives '
+            f"{evaluated:.10g}; the stated value {verdict} within tolerance."
+        )
+    if not summaries:
+        return ""
+    return "[Detected numeric equation check]\n" + "\n".join(summaries)
+
+
+def get_self_consistent_numeric_equations(
+    user_input: str,
+    include_mismatches: bool = False,
+) -> list[tuple[str, str, float, float]]:
+    """Return numeric equations whose typed expression matches the stated value."""
+    matches = re.finditer(
+        r"([0-9][0-9eE+\-*/^().,\s×]*?)\s*=\s*([0-9][0-9,]*(?:\.[0-9]+)?)",
+        user_input,
+    )
+    equations: list[tuple[str, str, float, float]] = []
+    for match in matches:
+        expr = match.group(1).strip()
+        stated_raw = match.group(2).strip()
+        evaluated = _safe_eval_numeric_expr(expr)
+        stated = _safe_eval_numeric_expr(stated_raw)
+        if evaluated is None or stated is None:
+            continue
+        difference = abs(evaluated - stated)
+        tolerance = max(1e-6, abs(evaluated) * 1e-4)
+        if include_mismatches or difference <= tolerance:
+            equations.append((expr, stated_raw, evaluated, stated))
+    return equations
+
+
+def normalize_number_commas(text: str) -> str:
+    """Remove thousands separators inside numeric literals."""
+    return re.sub(r"(?<=\d),(?=\d{3}(?:\D|$))", "", text)
 
 
 def assess_latest_answer(
     user_input: str,
     image_paths: list[str] | None = None,
     image_urls: list[str] | None = None,
+    _allow_equation_fallback: bool = True,
 ) -> str:
     """Classify the latest answer separately from dialogue generation."""
     descriptor = get_problem_descriptor()
+    manifest = get_problem_manifest() or "(No detected labels.)"
+    current_label = get_current_label() or f"item {CURRENT_PROBLEM}"
+    normalized_user_input = normalize_number_commas(user_input)
+    numeric_equation_check = get_numeric_equation_check(user_input)
+    numeric_equation_block = f"\n{numeric_equation_check}\n" if numeric_equation_check else ""
     current_entries = PROBLEM_CONVERSATIONS.get(CURRENT_PROBLEM, [])
     history = "\n".join(
         f"{entry['type']}: {entry['description']}" for entry in current_entries
@@ -1381,6 +1998,9 @@ def assess_latest_answer(
     if _matches_example_one_part_b_answer(user_input, current_entries):
         dprint("[Answer judge] SOLVED: matched Example 1(b) exact-form shortcut.")
         return "SOLVED"
+    if _looks_like_unevaluated_special_power(user_input):
+        dprint("[Answer judge] UNCLEAR: unevaluated special power expression.")
+        return "UNCLEAR"
 
     instruction = f"""You are an independent answer checker.
 
@@ -1388,30 +2008,95 @@ Evaluate ONLY {descriptor} in the attached image and the learner's latest
 message. Re-solve the problem carefully before classifying the message. Pay
 close attention to signs, subtraction order, coordinates, and arithmetic.
 
+[Detected problem/case manifest]
+{manifest}
+
+[Current item label]
+{current_label}
+
+If {descriptor} is one named sub-part, case, condition, scenario, method, or
+category inside a larger parent question, evaluate completion for ONLY that
+current named item. Do not require answers for sibling cases from the same
+parent question. For example, if the current item is one listed case, a correct
+answer for that case alone is SOLVED even though other listed cases remain.
+If the current item label is a bare case name such as "annually",
+"quarterly", "(b)", or "method 2", locate that named case inside the parent
+problem in the image before judging. The absence of the parent number in the
+label does not mean this is a standalone problem.
+
 [Current-problem dialogue]
 {history}
 
 [Learner's latest message]
-{user_input}
+{normalized_user_input}
+{numeric_equation_block}
 
 Return SOLVED when the latest message states the correct final answer for every
-required part, even if it is short or corrects an earlier mistake.
-Return INCORRECT only when the latest message makes a concrete, verifiably
-wrong claim or gives a wrong answer.
+required part of the CURRENT named item, even if it is short or corrects an
+earlier mistake.
+Return INCORRECT only when the latest message attempts the requested final
+answer for the current item or makes a concrete verifiably wrong claim about a
+needed step. Do NOT mark an answer INCORRECT merely because it answers
+Isabella's narrower guiding question instead of the original item.
 Return UNCLEAR when it is partial, procedural, ambiguous, a question, or makes
 no verifiable answer claim.
 
-First identify exactly what the original problem in the image asks the learner
-to find. That original requested result controls completion, not a narrower
+Correct intermediate quantities are UNCLEAR, not SOLVED and not INCORRECT. If
+the current item asks for a final amount, value, expression, model, or result,
+then an answer that only gives a helper quantity such as a period count,
+frequency, rate per period, multiplier, base amount, exponent, coefficient,
+substituted input, or setup component is incomplete. Mark it UNCLEAR even when
+that helper quantity is correct.
+
+If Isabella's most recent question asked for a helper quantity, classify the
+learner's direct answer to that helper question as UNCLEAR unless the same
+message also states the original item's requested final answer. The completion
+status is about the original current item, not about whether Isabella's latest
+guiding question was answered.
+
+For items that ask for a final amount, value, numerical result, balance, total,
+distance, probability, measurement, or other computed quantity, a fully
+substituted model expression is still intermediate. Mark it UNCLEAR until the
+learner evaluates it to the requested quantity, unless the original item
+explicitly asks for an expression, equation, model, formula, or setup.
+
+First identify exactly what the CURRENT named item asks the learner to find.
+That current item controls completion, not sibling cases and not a narrower
 question Isabella asked while guiding the learner. Set "contains_final_answer"
-to true only when the latest message explicitly states the requested result.
+to true only when the latest message explicitly states the requested result for
+the current item.
 Do not infer an unstated final answer merely because the learner wrote an
 equation, substitution, transformation, or setup from which it could be
-solved. Such work is UNCLEAR unless that form itself is what the original
-problem requests. When the problem provides a template containing one unknown
-parameter and asks the learner to identify the resulting expression, an
-explicit correct value of that parameter is sufficient if it uniquely
-determines the requested expression.
+solved. A fully substituted expression, equation, ordered pair, or exact
+formula counts as a final answer ONLY when the current item asks for an
+expression, equation, model, formula, point, ordered pair, or other
+representation rather than a simplified value.
+
+For function-evaluation tasks of the form "Let f(x)=... evaluate f(a)", a
+response that only substitutes a into the defining formula is NOT a final
+answer. For example, if f(x)=b^x, then "b^a" is a substitution step for f(a),
+not an evaluated value. When the input a is negative, fractional, radical, or
+irrational, require a numerical value or decimal approximation unless the item
+explicitly asks for an exact symbolic form. Do not mark direct substitution,
+reciprocal-power form, radical form, or fractional-power form as SOLVED merely
+because it is mathematically equivalent. If it is mathematically equivalent but
+not evaluated enough, return UNCLEAR rather than INCORRECT.
+
+Apply this function-evaluation rule strictly:
+- If f(x)=b^x and the item asks for f(a), the answer "b^a" is UNCLEAR.
+- If a is a negative fraction, rewriting "b^a" as a reciprocal with the same
+  fractional exponent, a radical, or another fractional-power expression is
+  still UNCLEAR until it is evaluated numerically.
+- If a is irrational and no simpler exact form exists, the direct expression
+  "b^a" is still UNCLEAR for an "evaluate" task; a numerical approximation is
+  the evaluated value.
+
+For expression/model/formula tasks, a fully substituted exact expression can
+count as a final answer when it directly represents the requested expression,
+equation, model, formula, or setup and all item-specific values are included.
+When the problem provides a template containing one unknown parameter and asks
+the learner to identify the resulting expression, an explicit correct value of
+that parameter is sufficient if it uniquely determines the requested expression.
 
 Judge mathematical meaning, not presentation. Accept harmless informal
 formatting when the intended answer is unambiguous. For a requested ordered
@@ -1419,13 +2104,27 @@ pair or vector, accept two clearly stated comma-separated values without
 requiring parentheses or angle brackets. Do not require units, a sentence, or
 an explanation unless the problem explicitly requires one.
 
-Equivalent final forms count as final answers. If the problem asks for a value,
-expression, equation, or point, accept any mathematically equivalent exact form
-unless the original problem explicitly demands a particular representation
-(for example: decimal approximation, simplified radical form, positive
-exponents only, factored form, expanded form, or a rounded value). Do not keep
-asking the learner to rewrite a correct exact answer merely because Isabella
-asked an intermediate guiding question.
+Interpret numeric equations generously:
+- Treat commas inside numbers as thousands separators, not as list separators.
+  For example, "1,425.7608" means 1425.7608.
+- Treat multiplication as commutative when checking a final numeric equation.
+  For example, "1.03^12 * 1000 = 1425.7608" and
+  "1000 * 1.03^12 = 1425.7608" have the same mathematical meaning.
+- If the latest message includes a numeric equation whose right-hand side or
+  clearly stated result is the correct requested final amount/value, return
+  SOLVED even if the expression is written in a different but equivalent order.
+- Do not mark a correct numeric final amount INCORRECT merely because the
+  accompanying expression is informally typed with "^", omitted multiplication
+  signs, or a different multiplication order.
+
+Equivalent final forms count as final answers when they match the representation
+the current item requests. If the current item asks for an expression, equation,
+point, exact symbolic value, or model, accept any mathematically equivalent
+exact form unless the original problem explicitly demands a particular
+representation (for example: decimal approximation, simplified radical form,
+positive exponents only, factored form, expanded form, or a rounded value). For
+direct function-evaluation tasks, do not accept an unevaluated substitution
+expression merely because it is equivalent after simplification.
 
 Interpret common typed math generously before judging:
 - Treat "^" as exponentiation.
@@ -1485,6 +2184,17 @@ Output ONLY one JSON object:
             status = "UNCLEAR"
         if not contains_final_answer and status != "UNCLEAR":
             status = "UNCLEAR"
+        if status == "INCORRECT" and _allow_equation_fallback:
+            for _, stated_raw, _, _ in get_self_consistent_numeric_equations(user_input):
+                fallback_status = assess_latest_answer(
+                    stated_raw,
+                    image_paths=image_paths,
+                    image_urls=image_urls,
+                    _allow_equation_fallback=False,
+                )
+                if fallback_status == "SOLVED":
+                    dprint("[Answer judge] SOLVED: numeric equation fallback matched final value.")
+                    return "SOLVED"
         dprint(f"[Answer judge] {status}: {calculation}")
         return status
     except Exception as e:
@@ -1614,7 +2324,121 @@ def reply_needs_shape_repair(reply: str) -> bool:
     visible_reply = reply.replace("[EOP]", "").replace("[EOF]", "").strip()
     word_count = len(re.findall(r"\b[\w'-]+\b", visible_reply))
     expected_question_marks = 0 if "[EOP]" in reply else 1
-    return visible_reply.count("?") != expected_question_marks or word_count > 35
+    compound_question = re.search(
+        r"\b(?:and|or)\s+(?:how|what|why|when|where|which|can|could|would|will|do|does|did|is|are)\b",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    validation_opener = re.match(
+        r"^(?:yes|that's right|correct|you're right|right|you said|you noticed|great|good|nice|thanks)\b",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    premature_rate_multiplier = re.search(
+        r"\bwhat\s+does\s+multipl\w+\s+by\s+0\.\d+",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    formula_delivery = re.search(
+        r"\bformula\b.*\b(?:helps|is|with|like)\b|[A-Za-z]\s*=\s*[A-Za-z0-9(]",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    direct_check_prompt = re.search(
+        r"\b(?:let'?s check|check your|step by step|multiply it out|calculate|simplify|solve it)\b",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    function_eval_representation_loop = (
+        re.search(r"\brepresent\b", visible_reply, re.IGNORECASE) is not None
+        and re.search(r"\b(?:substitut|f\(x\)|f\s*\()", visible_reply, re.IGNORECASE) is not None
+    )
+    expression_representation_loop = (
+        re.search(r"\brepresent\b", visible_reply, re.IGNORECASE) is not None
+        and re.search(r"(?:\$.*?[+\-*/^].*?\$|\d+\s*(?:\^|\*\*|\*|×)\s*\(?\d)", visible_reply) is not None
+    )
+    previous_value_loop = re.search(
+        r"\b(?:stay|stays|still|same|like before)\b",
+        visible_reply,
+        re.IGNORECASE,
+    )
+    return (
+        visible_reply.count("?") != expected_question_marks
+        or word_count > 35
+        or compound_question is not None
+        or validation_opener is not None
+        or premature_rate_multiplier is not None
+        or formula_delivery is not None
+        or direct_check_prompt is not None
+        or function_eval_representation_loop
+        or expression_representation_loop
+        or previous_value_loop is not None
+    )
+
+
+def simplify_compound_question(reply: str) -> str:
+    """Keep Socratic turns to one conceptual question."""
+    return re.sub(
+        r"\s*,?\s+\b(?:and|or)\s+(?:how|what|why|when|where|which|can|could|would|will|do|does|did|is|are)\b.*\?\s*$",
+        "?",
+        reply.strip(),
+        flags=re.IGNORECASE,
+    )
+
+
+def collapse_extra_question_marks(reply: str) -> str:
+    """Keep the final educational question instead of comma-splicing questions."""
+    cleaned = reply.strip()
+    if cleaned.count("?") <= 1:
+        return cleaned
+
+    questions = re.findall(r"[^?]*\?", cleaned)
+    if questions:
+        final_question = questions[-1].strip()
+        return final_question[0].upper() + final_question[1:]
+    return cleaned
+
+
+def rewrite_stays_same_question(reply: str) -> str:
+    """Turn repeated previous-value checks into forward-looking questions."""
+    cleaned = reply.strip()
+    already_rewritten = re.search(
+        r"^what\s+does\s+(.+?)\s+still\s+become\s+instead\?\s*$",
+        cleaned,
+        re.IGNORECASE,
+    )
+    if already_rewritten:
+        subject = already_rewritten.group(1).strip()
+        return f"What does {subject} become instead?"
+
+    direct_stay = re.search(
+        r"\bdoes\s+(.+?)\s+(?:stay|stays|remain|remains)\s+(?:at|the same as|like)\b.*\?\s*$",
+        cleaned,
+        re.IGNORECASE,
+    )
+    if direct_stay:
+        subject = direct_stay.group(1).strip()
+        return f"What does {subject} become instead?"
+
+    implied_stay = re.search(
+        r"\bdoes\s+that\s+(?:also\s+)?mean\s+(.+?)\s+(?:is|are)\s+still\b.*\?\s*$",
+        cleaned,
+        re.IGNORECASE,
+    )
+    if implied_stay:
+        subject = implied_stay.group(1).strip()
+        return f"What does {subject} become instead?"
+
+    return cleaned
+
+
+def cleanup_comma_splice_questions(reply: str) -> str:
+    """Fix common generated comma splices before a question clause."""
+    return re.sub(
+        r",\s+(Can|Could|Would|Will|Do|Does|Did|Is|Are|Why|What|How|When|Where|Which)\b",
+        r". \1",
+        reply.strip(),
+    )
 
 
 def generate_ai_response(
@@ -1656,6 +2480,10 @@ def generate_ai_response(
     if cleaned_reply != reply.strip():
         dprint("[Control] Ignored completion marker emitted by dialogue model.")
     reply = cleaned_reply
+    reply = cleanup_comma_splice_questions(reply)
+    reply = simplify_compound_question(reply)
+    reply = rewrite_stays_same_question(reply)
+    reply = collapse_extra_question_marks(reply)
 
     if reply_needs_shape_repair(reply):
         repair_messages = cast(Any, messages + [
@@ -1666,8 +2494,66 @@ def generate_ai_response(
                 "words and exactly one question mark. Keep it "
                 "grounded, use at most one small hint, reveal no final answer, and "
                 "introduce no new facts or topic labels. If the learner's attempt "
-                "is incorrect, begin exactly with \"That's incorrect.\" and do not "
-                "praise the attempt. Output only the rewrite."
+                "is incorrect, do not say \"That's incorrect\" or give the correction; "
+                "do not thank, praise, validate, or say \"Try\". If the teaching "
+                "strategy is protege_effect, preserve that strategy: stay in learner "
+                "mode. On the first Protege turn, give one plausible wrong reasoning "
+                "chain that is actually wrong for the current case, then ask the learner "
+                "to explain why that reasoning is wrong. Do not present a correct method "
+                "as vague uncertainty. "
+                "After the learner corrects it, do not introduce a new unrelated "
+                "mistake; ask for their explanation, the next adapted value, or the "
+                "current expression. Do not ask whether the same rejected wrong idea is "
+                "actually correct; ask what the corrected value/count/relationship is "
+                "or why it changes. If the learner already stated the corrected piece, "
+                "ask why that correction is true or how it changes the next setup piece. "
+                "After a correction, do not ask whether another value stays the same "
+                "or is still the previous case's value; ask what it becomes instead. "
+                "If the teaching strategy is "
+                "worked_example_fading, preserve that strategy: anchor to "
+                "the previous solved case and ask what changes or what adapted piece "
+                "comes next. Otherwise ask one Socratic diagnostic or targeted-check "
+                "question with no multi-part phrasing joined by \"and\" or \"or\". "
+                "If the learner gave a substituted or model expression for an item "
+                "that asks for an amount, value, balance, total, or result, ask what "
+                "numerical amount/value it gives before using the bare-final-answer "
+                "fallback. Do not ask only what the expression represents. If the learner "
+                "gave only a final answer, use only this shape: "
+                "\"Why did you think it was <their answer>?\" Do not infer reasoning "
+                "from Isabella's previous question. Do not ask them to check, calculate, "
+                "multiply, simplify, solve, or work step by step before they reveal "
+                "their reasoning unless they gave a substituted expression that still "
+                "needs evaluation. If the learner's reasoning is "
+                "visible, restate it as a statement, not a question, then ask one "
+                "observation question about their work. Do not use the word \"should\" "
+                "for visible incorrect reasoning. If they show an arithmetic expression, "
+                "ask only about that expression, not the rule. For repeated multiplication, "
+                "ask only how many factors they wrote; do not mention the exponent, "
+                "substitution value, or correct count. For useful intermediate answers, "
+                "do not start with \"Great\", \"Good\", \"Nice\", \"Yes\", \"That's right\", \"Right\", "
+                "\"Correct\", or \"You're right\"; "
+                "do not start by paraphrasing with \"You said\" or \"You noticed\". "
+                "Ask only one thing: why it works, what it represents, how to check it, "
+                "or what follows. If a quantity has multiple parts, ask about one part "
+                "at a time. If the learner gives only a useful number or expression, ask "
+                "what it represents before introducing a new operation with it. Do not "
+                "ask how to use that number or expression in the same reply. For rates "
+                "and percentages, ask what base quantity the rate applies to or what "
+                "one-period change it creates before asking about a multiplier or formula. "
+                "Do not say \"multiplying by <rate>\" yet. If the learner asks for a "
+                "formula, method, rule, or procedure, do not provide the formula or "
+                "symbolic template; ask about one known quantity, repeated change, or "
+                "meaning first. For protege_effect, do not solve the near-miss yourself; "
+                "the learner should do the explaining. For "
+                "worked_example_fading, keep the previous-case anchor "
+                "short. If the learner identified one changed input, parameter, count, "
+                "condition, or case feature, ask for the next linked changed quantity "
+                "or relationship needed to adapt the previous solution. You may ask for "
+                "two tightly linked changed values when both adapt the prior example. "
+                "If the draft contains a phrase "
+                "like \"and how\" or \"and what\", keep only the first conceptual question "
+                "and delete the rest. "
+                "Output only the rewrite."
             )},
         ])
         response = openai_client.chat.completions.create(
@@ -1678,6 +2564,10 @@ def generate_ai_response(
         )
         reply = response.choices[0].message.content or reply
         reply = strip_untrusted_control_markers(reply)
+        reply = cleanup_comma_splice_questions(reply)
+        reply = simplify_compound_question(reply)
+        reply = rewrite_stays_same_question(reply)
+        reply = collapse_extra_question_marks(reply)
 
     dprint(f"[Latency] 🤖 GPT 답변 생성: {time.time() - start_llm:.4f}초")
     return reply or "I may be missing one detail; which part of your reasoning should we check first?"
@@ -1702,9 +2592,17 @@ def prompt_total_problems_manually(default: int = 1) -> int:
 if __name__ == "__main__":
     dprint("Starting conversation with Isabella.")
 
+    default_example_path = get_first_example_image_path()
+    image_prompt_hint = (
+        f"press Enter for {Path(default_example_path).name}"
+        if default_example_path
+        else "press Enter to skip"
+    )
     image_ref = input(
-        "Enter an image path or URL (press Enter to skip): "
+        f"Enter an image path or URL ({image_prompt_hint}): "
     ).strip().strip('"').strip("'")
+    if not image_ref and default_example_path:
+        image_ref = default_example_path
 
     image_paths: list[str] = []
     image_urls: list[str] = []
@@ -1752,6 +2650,11 @@ if __name__ == "__main__":
     last_opened_problem: int | None = None
     while True:
         if last_opened_problem != CURRENT_PROBLEM:
+            reply_strategy = determine_teaching_strategy_for_problem(
+                CURRENT_PROBLEM,
+                image_paths=image_paths or None,
+                image_urls=image_urls or None,
+            )
             opener_start = time.time()
             opener_dev, opener_user = build_prompt("", is_opener=True)
 
@@ -1781,7 +2684,7 @@ if __name__ == "__main__":
             increment_turn_count(CURRENT_PROBLEM)
             last_opened_problem = CURRENT_PROBLEM
 
-            print_isabella_reply(opener_reply)
+            print_isabella_reply(opener_reply, reply_strategy)
             dprint(f"🎯 Opener latency: {time.time() - opener_start:.4f}s")
 
         raw_input_str = input("You: ").strip()
@@ -1792,6 +2695,7 @@ if __name__ == "__main__":
         user_input = raw_input_str
 
         start_total = time.time()
+        reply_strategy = get_current_teaching_strategy()
         answer_status = assess_latest_answer(
             user_input,
             image_paths=image_paths or None,
@@ -1855,7 +2759,7 @@ if __name__ == "__main__":
         if all_done:
             dprint("🎉 All problems finished!")
 
-        print_isabella_reply(ai_reply)
+        print_isabella_reply(ai_reply, reply_strategy)
         dprint(f"🎯 총 체감 레이턴시(Total Latency): {time.time() - start_total:.4f}초")
 
         if all_done:

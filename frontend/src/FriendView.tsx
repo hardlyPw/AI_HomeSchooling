@@ -10,6 +10,11 @@ interface FriendMessage {
   timestamp: string
 }
 
+interface FriendHistoryMessage {
+  role: 'user' | 'ai' | 'assistant'
+  text: string
+}
+
 function nowHHMM(): string {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
@@ -41,15 +46,31 @@ export default function FriendView({ onExit }: Props) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
+  const [cooldownArmed, setCooldownArmed] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
 
   const idRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/friend/state')
+    fetch('http://localhost:8000/api/v1/friend/history')
       .then(r => r.json())
-      .then(d => { if (typeof d.affinity === 'number') setAffinity(d.affinity) })
+      .then(d => {
+        if (typeof d.affinity === 'number') setAffinity(d.affinity)
+        if (Array.isArray(d.messages)) {
+          const restored = d.messages
+            .filter((m: FriendHistoryMessage) => m.role === 'user' || m.role === 'ai' || m.role === 'assistant')
+            .map((m: FriendHistoryMessage, index: number) => ({
+              role: m.role === 'user' ? 'user' : 'assistant',
+              text: m.text,
+              id: index + 1,
+              timestamp: nowHHMM(),
+            }))
+          idRef.current = restored.length
+          setMessages(restored)
+        }
+      })
       .catch(() => {})
   }, [])
 
@@ -68,6 +89,8 @@ export default function FriendView({ onExit }: Props) {
   const reset = async () => {
     if (isStreaming) return
     setMessages([])
+    setCooldownArmed(false)
+    setIsOnline(true)
     try {
       const r = await fetch('http://localhost:8000/api/v1/friend/reset', { method: 'POST' })
       const d = await r.json()
@@ -77,10 +100,21 @@ export default function FriendView({ onExit }: Props) {
     }
   }
 
+  const forceCooldown = async () => {
+    if (isStreaming) return
+    try {
+      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown', { method: 'POST' })
+      setCooldownArmed(true)
+    } catch {
+      // Debug helper only; keep the demo UI calm if the backend is not reachable.
+    }
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || isStreaming) return
     setInput('')
+    setCooldownArmed(false)
     setIsStreaming(true)
     setIsTyping(true)
 
@@ -117,6 +151,7 @@ export default function FriendView({ onExit }: Props) {
             try {
               const obj = JSON.parse(data)
               if (typeof obj.delta === 'string') {
+                setIsOnline(true)
                 if (!assistantStarted) {
                   assistantStarted = true
                   setIsTyping(false)
@@ -127,6 +162,11 @@ export default function FriendView({ onExit }: Props) {
                 ))
               } else if (typeof obj.affinity === 'number') {
                 setAffinity(obj.affinity)
+              } else if (obj.status === 'cooldown') {
+                setIsOnline(false)
+                setIsTyping(true)
+              } else if (obj.status === 'delayed') {
+                setIsTyping(true)
               } else if (obj.error) {
                 setMessages(prev => [...prev, {
                   role: 'assistant',
@@ -150,6 +190,7 @@ export default function FriendView({ onExit }: Props) {
     } finally {
       setIsStreaming(false)
       setIsTyping(false)
+      setIsOnline(true)
     }
   }
 
@@ -169,7 +210,9 @@ export default function FriendView({ onExit }: Props) {
         </div>
 
         {showDebug && (
-          <div className="friend-affinity-num">affinity {affinity}/100</div>
+          <div className="friend-affinity-num">
+            affinity {affinity}/100{cooldownArmed ? ' | next cooldown armed' : ''}
+          </div>
         )}
       </aside>
 
@@ -180,17 +223,11 @@ export default function FriendView({ onExit }: Props) {
           </button>
           <div className="friend-chat-title">
             <span className="friend-name">Jiho</span>
-            <span className="friend-status">online · texting</span>
+            <span className={`friend-status ${isOnline ? 'online' : 'offline'}`}>
+              <span className="friend-status-dot" />
+              {isOnline ? 'online' : 'offline'}
+            </span>
           </div>
-          <button
-            className="friend-reset"
-            onClick={reset}
-            disabled={isStreaming}
-            aria-label="Reset conversation"
-            title="Reset conversation"
-          >
-            <RotateCw size={16} />
-          </button>
           <button
             className={`friend-debug-toggle ${showDebug ? 'on' : ''}`}
             onClick={() => setShowDebug(v => !v)}
@@ -198,6 +235,27 @@ export default function FriendView({ onExit }: Props) {
           >
             dbg
           </button>
+          {showDebug && (
+            <>
+              <button
+                className="friend-reset"
+                onClick={reset}
+                disabled={isStreaming}
+                aria-label="Reset conversation"
+                title="Reset conversation"
+              >
+                <RotateCw size={16} />
+              </button>
+              <button
+                className="friend-debug-toggle"
+                onClick={forceCooldown}
+                disabled={isStreaming}
+                title="Force cooldown on next message"
+              >
+                cooldown
+              </button>
+            </>
+          )}
           <button className="friend-go-class" onClick={onExit}>
             Go to class
           </button>

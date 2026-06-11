@@ -590,10 +590,19 @@ textarea {
   background: #fff;
 }
 
+.autorater-example-title {
+  margin-bottom: 8px;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .autorater-example-preview img {
   display: block;
   width: 100%;
-  max-height: 180px;
+  max-height: 220px;
   object-fit: contain;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -887,6 +896,23 @@ textarea {
   font-weight: 600;
 }
 
+.autorater-example-placeholder,
+.autorater-example-error {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  font-size: 0.86rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+}
+
+.autorater-example-error {
+  margin-top: 8px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 /* ── Autorater chat hint ───────────────────────────────────────── */
 .autorater-chat-hint {
   padding: 10px 14px;
@@ -1086,8 +1112,26 @@ textarea {
 }
 
 .friend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.friend-status.online {
   color: #16a34a;
+}
+
+.friend-status.offline {
+  color: #8a94a3;
+}
+
+.friend-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .friend-debug-toggle {
@@ -1107,6 +1151,11 @@ textarea {
   background: #1e293b;
   border-color: #1e293b;
   color: #fff;
+}
+
+.friend-debug-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .friend-chat-window {
