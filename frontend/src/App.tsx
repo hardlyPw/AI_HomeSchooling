@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { FastForward, FileText, MessageCircle, Users, X } from 'lucide-react'
+import { FastForward, FileText, ListVideo, MessageCircle, PlayCircle, X } from 'lucide-react'
 import FriendView from './FriendView'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -44,6 +44,16 @@ const EXAMPLE_IMAGE_PATHS = [
   '/assets/Examples/example_7.png',
 ]
 
+const LECTURES = [
+  {
+    id: 'chapter-4-1',
+    title: 'Ch. 4.1 Exponential Functions',
+    description: 'Learn the definition and core behavior of exponential functions.',
+    src: '/assets/video.mp4',
+    duration: '20:36',
+  },
+]
+
 interface Message {
   role: 'user' | 'assistant'
   text: string
@@ -76,6 +86,7 @@ interface SelectionButtonAnchor {
 }
 
 type LessonState = 'idle' | 'playing' | 'paused' | 'question'
+type AppMode = 'lesson' | 'friend' | 'playlist'
 
 function App() {
   const [input, setInput] = useState('')
@@ -95,7 +106,9 @@ function App() {
   const [showChat, setShowChat] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
   const [hasOpenedPdf, setHasOpenedPdf] = useState(false)
-  const [appMode, setAppMode] = useState<'lesson' | 'friend'>('friend')
+  const [appMode, setAppMode] = useState<AppMode>('friend')
+  const [selectedLectureId, setSelectedLectureId] = useState(LECTURES[0].id)
+  const [lectureThumbnails, setLectureThumbnails] = useState<Record<string, string>>({})
 
   // Autorater (Isabella) mode state
   const [autoraterMode, setAutoraterMode] = useState(false)
@@ -159,6 +172,42 @@ function App() {
       reader.readAsDataURL(blob)
     })
   }
+
+  const captureVideoThumbnail = (src: string) => new Promise<string>((resolve, reject) => {
+    const video = document.createElement('video')
+    video.src = src
+    video.muted = true
+    video.preload = 'metadata'
+    video.playsInline = true
+
+    const cleanup = () => {
+      video.removeAttribute('src')
+      video.load()
+    }
+
+    video.onloadedmetadata = () => {
+      video.currentTime = Math.min(3, Math.max(0, (video.duration || 6) * 0.12))
+    }
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = video.videoWidth || 640
+      canvas.height = video.videoHeight || 360
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        cleanup()
+        reject(new Error('Could not capture video thumbnail'))
+        return
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+      cleanup()
+      resolve(dataUrl)
+    }
+    video.onerror = () => {
+      cleanup()
+      reject(new Error(`Could not load ${src}`))
+    }
+  })
 
   const getSelectionAttachments = (): ChatAttachment[] => [
     ...pdfSelections.map(selection => ({
@@ -227,6 +276,22 @@ function App() {
       .then(r => r.json())
       .then(setFigures)
       .catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    LECTURES.forEach(lecture => {
+      captureVideoThumbnail(lecture.src)
+        .then(thumbnail => {
+          if (!cancelled) {
+            setLectureThumbnails(prev => ({ ...prev, [lecture.id]: thumbnail }))
+          }
+        })
+        .catch(console.error)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -587,10 +652,79 @@ function App() {
     }
   }
 
+  const selectedLecture = LECTURES.find(lecture => lecture.id === selectedLectureId) ?? LECTURES[0]
+
+  const openPlaylist = () => {
+    videoRef.current?.pause()
+    setLessonState('paused')
+    setShowPdf(false)
+    setShowChat(false)
+    setAppMode('playlist')
+  }
+
+  const openLecture = (lectureId: string) => {
+    setSelectedLectureId(lectureId)
+    setAppMode('lesson')
+    setLessonState('idle')
+    setShowPdf(false)
+    setShowChat(false)
+  }
+
   if (appMode === 'friend') {
     return (
       <div className="main-layout">
-        <FriendView onExit={() => setAppMode('lesson')} />
+        <FriendView onExit={openPlaylist} />
+      </div>
+    )
+  }
+
+  if (appMode === 'playlist') {
+    const firstLectureThumbnail = lectureThumbnails[LECTURES[0].id]
+    return (
+      <div className="main-layout playlist-view">
+        <aside className="playlist-hero">
+          <div className="playlist-card">
+            {firstLectureThumbnail ? (
+              <img src={firstLectureThumbnail} alt="" className="playlist-cover" />
+            ) : (
+              <div className="playlist-cover playlist-cover-placeholder" />
+            )}
+            <div className="playlist-card-body">
+              <p className="playlist-kicker">Lecture Playlist</p>
+              <h1>Exponential and Logarithmic Functions</h1>
+              <button className="playlist-play-all" onClick={() => openLecture(LECTURES[0].id)}>
+                <PlayCircle size={18} fill="currentColor" />
+                Play first lecture
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <main className="playlist-main">
+          <div className="lecture-list" aria-label="Lecture videos">
+            {LECTURES.map((lecture, index) => (
+              <button
+                key={lecture.id}
+                className={`lecture-row ${lecture.id === selectedLectureId ? 'active' : ''}`}
+                onClick={() => openLecture(lecture.id)}
+              >
+                <span className="lecture-index">{index + 1}</span>
+                <span className="lecture-thumb-wrap">
+                  {lectureThumbnails[lecture.id] ? (
+                    <img src={lectureThumbnails[lecture.id]} alt="" className="lecture-thumb" />
+                  ) : (
+                    <span className="lecture-thumb lecture-thumb-placeholder" />
+                  )}
+                  <span className="lecture-duration">{lecture.duration}</span>
+                </span>
+                <span className="lecture-meta">
+                  <strong>{lecture.title}</strong>
+                  <span>AI HomeSchooling · {lecture.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </main>
       </div>
     )
   }
@@ -601,7 +735,7 @@ function App() {
       <div className="teacher-view">
         <video
           ref={videoRef}
-          src="/assets/video.mp4"
+          src={selectedLecture.src}
           className="character-video"
           controls
           preload="metadata"
@@ -614,6 +748,11 @@ function App() {
         {lessonState === 'question' && (
           <div className="lesson-progress">Asking question</div>
         )}
+
+        <button className="playlist-return" onClick={openPlaylist}>
+          <ListVideo size={17} />
+          Lecture playlist
+        </button>
 
         <div className="lesson-buttons" aria-label="Lesson controls">
           <button
@@ -905,14 +1044,6 @@ function App() {
           title={showChat ? 'Hide chat' : 'Show chat'}
         >
           <MessageCircle size={22} />
-        </button>
-        <button
-          className="quick-action"
-          onClick={() => setAppMode('friend')}
-          aria-label="Chat with Jiho"
-          title="Chat with Jiho"
-        >
-          <Users size={22} />
         </button>
       </div>
       )}
