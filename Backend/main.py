@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.v1.chat import router as chat_router
 from api.v1.lesson import router as lesson_router
 from api.v1.autorater import router as autorater_router, _get_ar
+from api.v1.friend import router as friend_router
 
 
 @asynccontextmanager
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api/v1", tags=["Chat"])
 app.include_router(lesson_router, prefix="/api/v1/lesson", tags=["Lesson"])
 app.include_router(autorater_router, prefix="/api/v1/autorater", tags=["Autorater"])
+app.include_router(friend_router, prefix="/api/v1/friend", tags=["Friend"])
 
 @app.get("/")
 def health_check():

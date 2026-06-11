@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { ArrowLeft, FastForward, FileText, MessageCircle, Pause, Play, X } from 'lucide-react'
+import { ArrowLeft, FastForward, FileText, MessageCircle, Pause, Play, Users, X } from 'lucide-react'
+import FriendView from './FriendView'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -64,6 +65,7 @@ function App() {
   const [lessonState, setLessonState] = useState<LessonState>('idle')
   const [showChat, setShowChat] = useState(false)
   const [showPdf, setShowPdf] = useState(false)
+  const [appMode, setAppMode] = useState<'lesson' | 'friend'>('lesson')
 
   // Autorater (Isabella) mode state
   const [autoraterMode, setAutoraterMode] = useState(false)
@@ -501,6 +503,14 @@ function App() {
     return <Play size={20} strokeWidth={2.6} fill="currentColor" />
   }
 
+  if (appMode === 'friend') {
+    return (
+      <div className="main-layout">
+        <FriendView onExit={() => setAppMode('lesson')} />
+      </div>
+    )
+  }
+
   return (
     <div className="main-layout">
       <div className="teacher-view">
@@ -862,6 +872,14 @@ function App() {
           title={showChat ? 'Hide chat' : 'Show chat'}
         >
           <MessageCircle size={22} />
+        </button>
+        <button
+          className="quick-action"
+          onClick={() => setAppMode('friend')}
+          aria-label="Chat with Jiho"
+          title="Chat with Jiho"
+        >
+          <Users size={22} />
         </button>
       </div>
     </div>
