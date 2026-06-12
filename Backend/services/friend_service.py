@@ -1,20 +1,9 @@
-"""Jiho friend chat service — wraps Agent/AI_Friend.py for the FastAPI app.
-
-friend_service.py was previously a lightweight stub (keyword affinity, no RAG).
-Now it delegates to the real Agent/AI_Friend.py so the web UI gets the same
-persona, long-term memory retrieval (friend_memories_v2), and chunk
-consolidation as the standalone CLI.
-
-State note: AI_Friend.py uses module-level globals (conversation_history,
-affinity, _pending_chunk). This service is a process-singleton, so for a
-single-user demo this is fine. Multi-user would require refactoring AI_Friend
-to per-session state.
-"""
 from __future__ import annotations
 
 import os
 import random
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Iterator
@@ -30,31 +19,17 @@ import AI_Friend as af  # noqa: E402
 af.DEBUG_PROMPT = False
 
 
-# Lightweight keyword affinity nudges (kept from stub — AI_Friend's decision
-# layer is heavier and adds a second API call per turn; can be reintroduced
-# later if we want the full system).
-POSITIVE_HINTS = (
-    "thanks", "thank you", "love", "miss you", "lol", "haha", "lmao",
-    "u r the best", "ur the best", "you're the best", "fr",
-    "appreciate", "ngl ur cool", "ily",
-)
-NEGATIVE_HINTS = (
-    "shut up", "stfu", "stupid", "annoying", "boring", "lame",
-    "i hate", "hate you", "leave me alone", "idc", "whatever",
-    "kys", "fuck you", "fk u", "trash",
-)
-
 DELAY_TURN_THRESHOLD = 50
 EARLY_AWAY_PROBABILITY = 0.01
 LATE_AWAY_PROBABILITY = 0.10
 ALWAYS_COOLDOWN_PROBABILITY = 0.001
 COOLDOWN_SECONDS = 5 * 60
 COOLDOWN_REASONS = (
-    "게임 한 판 하느라",
-    "밥 먹느라",
-    "유튜브 보느라",
-    "잠깐 씻느라",
-    "폰 충전기 찾느라",
+    "in a game",
+    "eating",
+    "watching yt",
+    "in the shower",
+    "looking for my charger",
 )
 
 
@@ -76,6 +51,7 @@ class FriendService:
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
+        self._cooldown_skip_event = threading.Event()
 
     # ── State exposed to api/v1/friend.py ─────────────────────────────
     @property
@@ -95,6 +71,7 @@ class FriendService:
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
+        self._cooldown_skip_event.clear()
         drain_pending = getattr(af, "_drain_pending_chunk", None)
         if callable(drain_pending):
             drain_pending()
@@ -113,18 +90,9 @@ class FriendService:
     def force_next_double_text(self) -> None:
         self._force_next_double_text = True
 
-    # ── Affinity update (keyword stub) ────────────────────────────────
-    def _affinity_delta(self, user_text: str) -> int:
-        t = user_text.lower()
-        delta = 0
-        if any(h in t for h in POSITIVE_HINTS):
-            delta += 4
-        if any(h in t for h in NEGATIVE_HINTS):
-            delta -= 6
-        stripped = t.strip().strip(".!?")
-        if stripped in {"k", "ok", "idk", "whatever", "meh"}:
-            delta -= 2
-        return delta
+    def end_cooldown(self) -> None:
+        """Wake up any in-progress cooldown sleep immediately."""
+        self._cooldown_skip_event.set()
 
     def _apply_delta(self, delta: int) -> int:
         if delta < 0:
@@ -177,7 +145,11 @@ class FriendService:
 
         if away.mode in {"delayed", "cooldown"}:
             yield {"status": away.mode, "wait_seconds": away.wait_seconds}
-            time.sleep(away.wait_seconds)
+            if away.mode == "cooldown":
+                self._cooldown_skip_event.wait(timeout=away.wait_seconds)
+                self._cooldown_skip_event.clear()
+            else:
+                time.sleep(away.wait_seconds)
 
         # Long-term RAG retrieval (top_k uses CURRENT affinity, before LLM delta)
         top_k = 1 if af.affinity <= 40 else 5
@@ -207,6 +179,22 @@ class FriendService:
             f"({actual_change:+d}) | {decision.get('affinity_reason', '')}"
         )
 
+        yield {
+            "decision": {
+                "user_message": user_message,
+                "emotion": decision.get("emotion", ""),
+                "emotion_reason": decision.get("emotion_reason", ""),
+                "timing": decision.get("timing", ""),
+                "action": decision.get("action", ""),
+                "affinity_prev": old_affinity,
+                "affinity_next": af.affinity,
+                "affinity_delta": actual_change,
+                "affinity_reason": decision.get("affinity_reason", ""),
+                "reasoning": decision.get("reasoning", ""),
+                "away_mode": away.mode,
+            }
+        }
+
         # Build prompt with full persona + RAG + STM + decision cues + emotion
         prompt = af.build_prompt(
             user_input=user_message,
@@ -224,9 +212,13 @@ class FriendService:
         collected: list[str] = []
         first_delta_seconds: float | None = None
         if away.mode == "cooldown":
-            prefix = f"나 {away.reason} 잠깐 갔다 왔어. "
+            prefix = f"yo sry was {away.reason}."
             collected.append(prefix)
             yield {"delta": prefix}
+            yield {"message_break": True}
+
+        reply_prompt_tokens: int | None = None
+        reply_completion_tokens: int | None = None
 
         if decision.get("timing") == "double_text":
             ai_raw = af.generate_ai_response(prompt)
@@ -238,6 +230,10 @@ class FriendService:
                     first_delta_seconds = time.perf_counter() - llm_started
                 collected.append((" " if collected else "") + msg)
                 yield {"delta": msg}
+            usage = getattr(af, "last_response_usage", None)
+            if usage:
+                reply_prompt_tokens = usage.get("prompt_tokens")
+                reply_completion_tokens = usage.get("completion_tokens")
         else:
             stream = af.openai_client.chat.completions.create(
                 model="gpt-4o",
@@ -245,9 +241,13 @@ class FriendService:
                 temperature=0.8,
                 max_tokens=300,
                 stream=True,
+                stream_options={"include_usage": True},
             )
 
             for chunk in stream:
+                if getattr(chunk, "usage", None) is not None:
+                    reply_prompt_tokens = chunk.usage.prompt_tokens
+                    reply_completion_tokens = chunk.usage.completion_tokens
                 if not chunk.choices:
                     continue
                 piece = chunk.choices[0].delta.content
@@ -256,6 +256,7 @@ class FriendService:
                         first_delta_seconds = time.perf_counter() - llm_started
                     collected.append(piece)
                     yield {"delta": piece}
+            print(f"[Latency] GPT 답변: {time.perf_counter() - llm_started:.4f}초")
 
         reply = "".join(collected).strip() or "brb"
 
@@ -292,5 +293,23 @@ class FriendService:
             f"reply_chars={len(reply)}"
         )
 
+        yield {"timing": {"total_seconds": round(total_seconds, 2)}}
+
+        decision_usage = decision.get("_usage") or {}
+        decision_prompt = decision_usage.get("prompt_tokens")
+        decision_completion = decision_usage.get("completion_tokens")
+        token_components = [
+            (decision_prompt or 0) + (decision_completion or 0),
+            (reply_prompt_tokens or 0) + (reply_completion_tokens or 0),
+        ]
+        yield {
+            "tokens": {
+                "decision_prompt": decision_prompt,
+                "decision_completion": decision_completion,
+                "reply_prompt": reply_prompt_tokens,
+                "reply_completion": reply_completion_tokens,
+                "total": sum(token_components) if any(token_components) else None,
+            }
+        }
         yield {"affinity": af.affinity, "affinity_prev": old_affinity}
         yield {"done": True}

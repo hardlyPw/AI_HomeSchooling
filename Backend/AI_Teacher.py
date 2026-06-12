@@ -118,51 +118,6 @@ def _log_prompt(messages: list[dict]) -> None:
     print()
 
 
-def get_teacher_response(
-    user_message: str,
-    conversation_history: list[dict] | None = None,
-    current_video_time: float | None = None,
-    figure_images: list[str] | None = None,
-) -> tuple[str, str]:
-    script_context = get_script_so_far(current_video_time)
-    print(f"[DEBUG] 영상 시간:        {f'{current_video_time:.1f}s' if current_video_time is not None else '없음'}")
-    print(f"[DEBUG] 스크립트 컨텍스트: {'포함 (' + str(len(script_context)) + '자)' if script_context else '없음 (수업 전)'}")
-    print(f"[DEBUG] 대화 히스토리:    {len(conversation_history) if conversation_history else 0}개")
-    print(f"[DEBUG] Figure 이미지:    {'첨부 ' + str(len(figure_images)) + '장' if figure_images else '없음'}")
-
-    system_parts = [TEACHER_PERSONA]
-    if script_context:
-        system_parts.append(f"[Lesson transcript so far]\n{script_context}")
-    system_prompt = "\n\n".join(system_parts)
-
-    messages: list[dict] = [{"role": "system", "content": system_prompt}]
-
-    if conversation_history:
-        for msg in conversation_history[-50:]:
-            role = "user" if msg["role"] == "user" else "assistant"
-            messages.append({"role": role, "content": msg["text"]})
-
-    if figure_images:
-        content_parts: list[dict] = [{"type": "text", "text": user_message}]
-        for img in figure_images:
-            content_parts.append({"type": "image_url", "image_url": {"url": img}})
-        messages.append({"role": "user", "content": content_parts})
-    else:
-        messages.append({"role": "user", "content": user_message})
-
-    _log_prompt(messages)
-
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.7,
-        max_tokens=500,
-    )
-    reply = response.choices[0].message.content or "Please try asking again in a moment."
-    summary = _summarize(reply)
-    return reply, summary
-
-
 def get_teacher_response_stream(
     user_message: str,
     conversation_history: list[dict] | None = None,
@@ -211,24 +166,3 @@ def get_teacher_response_stream(
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
-
-
-def summarize_reply(answer: str) -> str:
-    return _summarize(answer)
-
-
-def _summarize(answer: str) -> str:
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": (
-                "Summarize the teacher's answer in 2-3 short sentences a student can quickly read in chat. "
-                "Keep only the core concept. "
-                "No filler or decorative phrasing."
-            )},
-            {"role": "user", "content": answer},
-        ],
-        temperature=0.3,
-        max_tokens=150,
-    )
-    return response.choices[0].message.content or answer

@@ -1,5 +1,5 @@
 from typing import Iterator
-from AI_Teacher import get_teacher_response, get_teacher_response_stream
+from AI_Teacher import get_teacher_response_stream
 
 HISTORY_LIMIT = 50  # 최대 50개 메시지 유지 (25회 대화)
 
@@ -35,26 +35,6 @@ class ChatService:
         self.conversation_history.append({"role": "assistant", "text": reply})
         if len(self.conversation_history) > HISTORY_LIMIT:
             self.conversation_history = self.conversation_history[-HISTORY_LIMIT:]
-
-    def get_reply(
-        self,
-        user_message: str,
-        pdf_context: str | None = None,
-        figure_context: str | None = None,
-        figure_images: list[str] | None = None,
-        current_video_time: float | None = None,
-    ) -> tuple[str, str]:
-        user_content = self._build_user_content(user_message, pdf_context, figure_context, figure_images)
-
-        reply, summary = get_teacher_response(
-            user_content,
-            self.conversation_history,
-            current_video_time,
-            figure_images,
-        )
-
-        self._record_turn(user_content, reply)
-        return reply, summary
 
     def get_reply_stream(
         self,

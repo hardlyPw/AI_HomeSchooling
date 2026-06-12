@@ -15,6 +15,10 @@ frontend/dist/
 # Agent runtime artifacts
 Agent/conversations/
 
+# Runtime logs (backend/frontend dev servers)
+logs/
+*.log
+
 # IDE / OS
 .vscode/
 .vs/
