@@ -61,6 +61,12 @@ def debug_cooldown():
     return {"ok": True}
 
 
+@router.post("/debug/double-text")
+def debug_double_text():
+    friend_service.force_next_double_text()
+    return {"ok": True}
+
+
 @router.post("/chat/stream")
 def chat_stream(request: FriendChatRequest):
     def event_generator():

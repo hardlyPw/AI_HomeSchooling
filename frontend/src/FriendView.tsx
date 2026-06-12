@@ -47,6 +47,7 @@ export default function FriendView({ onExit }: Props) {
   const [isTyping, setIsTyping] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [cooldownArmed, setCooldownArmed] = useState(false)
+  const [doubleTextArmed, setDoubleTextArmed] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
 
   const idRef = useRef(0)
@@ -90,6 +91,7 @@ export default function FriendView({ onExit }: Props) {
     if (isStreaming) return
     setMessages([])
     setCooldownArmed(false)
+    setDoubleTextArmed(false)
     setIsOnline(true)
     try {
       const r = await fetch('http://localhost:8000/api/v1/friend/reset', { method: 'POST' })
@@ -110,11 +112,22 @@ export default function FriendView({ onExit }: Props) {
     }
   }
 
+  const forceDoubleText = async () => {
+    if (isStreaming) return
+    try {
+      await fetch('http://localhost:8000/api/v1/friend/debug/double-text', { method: 'POST' })
+      setDoubleTextArmed(true)
+    } catch {
+      // Debug helper only; keep the demo UI calm if the backend is not reachable.
+    }
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || isStreaming) return
     setInput('')
     setCooldownArmed(false)
+    setDoubleTextArmed(false)
     setIsStreaming(true)
     setIsTyping(true)
 
@@ -122,6 +135,7 @@ export default function FriendView({ onExit }: Props) {
     setMessages(prev => [...prev, userMsg])
 
     const assistantId = ++idRef.current
+    let activeAssistantId = assistantId
     let assistantStarted = false
 
     try {
@@ -150,15 +164,22 @@ export default function FriendView({ onExit }: Props) {
             const data = line.slice(6)
             try {
               const obj = JSON.parse(data)
-              if (typeof obj.delta === 'string') {
+              if (obj.message_break) {
+                activeAssistantId = ++idRef.current
+                assistantStarted = true
+                setIsTyping(false)
+                const nextAssistantId = activeAssistantId
+                setMessages(prev => [...prev, { role: 'assistant', text: '', id: nextAssistantId, timestamp: nowHHMM() }])
+              } else if (typeof obj.delta === 'string') {
                 setIsOnline(true)
+                const targetAssistantId = activeAssistantId
                 if (!assistantStarted) {
                   assistantStarted = true
                   setIsTyping(false)
-                  setMessages(prev => [...prev, { role: 'assistant', text: '', id: assistantId, timestamp: nowHHMM() }])
+                  setMessages(prev => [...prev, { role: 'assistant', text: '', id: targetAssistantId, timestamp: nowHHMM() }])
                 }
                 setMessages(prev => prev.map(m =>
-                  m.id === assistantId ? { ...m, text: m.text + obj.delta } : m
+                  m.id === targetAssistantId ? { ...m, text: m.text + obj.delta } : m
                 ))
               } else if (typeof obj.affinity === 'number') {
                 setAffinity(obj.affinity)
@@ -211,7 +232,7 @@ export default function FriendView({ onExit }: Props) {
 
         {showDebug && (
           <div className="friend-affinity-num">
-            affinity {affinity}/100{cooldownArmed ? ' | next cooldown armed' : ''}
+            affinity {affinity}/100{cooldownArmed ? ' | next cooldown armed' : ''}{doubleTextArmed ? ' | next double-text armed' : ''}
           </div>
         )}
       </aside>
@@ -253,6 +274,14 @@ export default function FriendView({ onExit }: Props) {
                 title="Force cooldown on next message"
               >
                 cooldown
+              </button>
+              <button
+                className="friend-debug-toggle"
+                onClick={forceDoubleText}
+                disabled={isStreaming}
+                title="Force double-text on next message"
+              >
+                double
               </button>
             </>
           )}

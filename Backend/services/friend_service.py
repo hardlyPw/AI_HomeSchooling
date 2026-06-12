@@ -75,6 +75,7 @@ class FriendService:
         af._cooldown_reason = ""
         self._away_count = 0
         self._force_next_cooldown = False
+        self._force_next_double_text = False
 
     # ── State exposed to api/v1/friend.py ─────────────────────────────
     @property
@@ -93,6 +94,7 @@ class FriendService:
         af._cooldown_reason = ""
         self._away_count = 0
         self._force_next_cooldown = False
+        self._force_next_double_text = False
         drain_pending = getattr(af, "_drain_pending_chunk", None)
         if callable(drain_pending):
             drain_pending()
@@ -107,6 +109,9 @@ class FriendService:
 
     def force_next_cooldown(self) -> None:
         self._force_next_cooldown = True
+
+    def force_next_double_text(self) -> None:
+        self._force_next_double_text = True
 
     # ── Affinity update (keyword stub) ────────────────────────────────
     def _affinity_delta(self, user_text: str) -> int:
@@ -184,6 +189,10 @@ class FriendService:
         # Decision Layer (gpt-4o-mini): emotion + timing + action + session_break + affinity_delta
         time_str, time_ctx = af._consume_time_context_for_turn()
         decision = af.make_decision(user_message, long_term, time_str, time_ctx)
+        if self._force_next_double_text:
+            self._force_next_double_text = False
+            decision = dict(decision)
+            decision["timing"] = "double_text"
         agent_emo = {
             "emotion": decision.get("emotion", ""),
             "reason": decision.get("emotion_reason", ""),
@@ -212,14 +221,6 @@ class FriendService:
         # Stream reply (AI_Friend.generate_ai_response is non-streaming, so we
         # call the openai client directly with stream=True here)
         llm_started = time.perf_counter()
-        stream = af.openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.8,
-            max_tokens=300,
-            stream=True,
-        )
-
         collected: list[str] = []
         first_delta_seconds: float | None = None
         if away.mode == "cooldown":
@@ -227,15 +228,34 @@ class FriendService:
             collected.append(prefix)
             yield {"delta": prefix}
 
-        for chunk in stream:
-            if not chunk.choices:
-                continue
-            piece = chunk.choices[0].delta.content
-            if piece:
+        if decision.get("timing") == "double_text":
+            ai_raw = af.generate_ai_response(prompt)
+            ai_replies = af._split_double_text(ai_raw)
+            for idx, msg in enumerate(ai_replies):
+                if idx > 0:
+                    yield {"message_break": True}
                 if first_delta_seconds is None:
                     first_delta_seconds = time.perf_counter() - llm_started
-                collected.append(piece)
-                yield {"delta": piece}
+                collected.append((" " if collected else "") + msg)
+                yield {"delta": msg}
+        else:
+            stream = af.openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "system", "content": prompt}],
+                temperature=0.8,
+                max_tokens=300,
+                stream=True,
+            )
+
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                piece = chunk.choices[0].delta.content
+                if piece:
+                    if first_delta_seconds is None:
+                        first_delta_seconds = time.perf_counter() - llm_started
+                    collected.append(piece)
+                    yield {"delta": piece}
 
         reply = "".join(collected).strip() or "brb"
 
