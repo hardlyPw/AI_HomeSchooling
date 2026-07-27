@@ -169,7 +169,7 @@ Note: Close friend of Jiho — from the same school or neighborhood."""
 def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
     start_embed = time.time()
     query_vector = model.encode(query_text).tolist()
-    print(f"[Latency] 🔍 임베딩 변환: {time.time() - start_embed:.4f}초")
+    print(f"[Latency] 임베딩 변환: {time.time() - start_embed:.4f}초")
 
     start_db = time.time()
     response = supabase.rpc(MEMORY_MATCH_RPC, {
@@ -177,7 +177,7 @@ def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
         "match_threshold": 0.0,
         "match_count": 50
     }).execute()
-    print(f"[Latency] 💾 장기기억 검색: {time.time() - start_db:.4f}초")
+    print(f"[Latency] 장기기억 검색: {time.time() - start_db:.4f}초")
 
     candidates = cast(list[dict[str, Any]], response.data) if isinstance(response.data, list) else []
     if not candidates:
@@ -565,6 +565,11 @@ Output JSON only:
         )
         raw = (resp.choices[0].message.content or "").strip()
         decision = json.loads(raw)
+        if getattr(resp, "usage", None) is not None:
+            decision["_usage"] = {
+                "prompt_tokens": resp.usage.prompt_tokens,
+                "completion_tokens": resp.usage.completion_tokens,
+            }
         print(f"[Decision] {time.time() - start:.2f}s → "
               f"timing={decision.get('timing')}, action={decision.get('action')}, "
               f"break={decision.get('session_break')}, "
@@ -855,8 +860,12 @@ Scan your draft. If any appear, rewrite — they break peer-tone:
     return prompt
 
 # ── GPT 답변 생성 (2nd API call) ──────────────────────────────────────
+last_response_usage: dict | None = None
+
+
 def generate_ai_response(prompt_text: str) -> str:
     """2nd call: 단일 답변 텍스트 반환. 연톡 분리는 _split_double_text()에서 처리."""
+    global last_response_usage
     print("\nGPT 답변 생성 중...")
     start = time.time()
     response = openai_client.chat.completions.create(
@@ -866,6 +875,14 @@ def generate_ai_response(prompt_text: str) -> str:
         max_tokens=300,
     )
     print(f"[Latency] GPT 답변: {time.time() - start:.4f}초")
+    last_response_usage = (
+        {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+        }
+        if getattr(response, "usage", None) is not None
+        else None
+    )
     return response.choices[0].message.content or "brb, gimme a sec"
 
 

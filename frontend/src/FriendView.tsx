@@ -15,6 +15,29 @@ interface FriendHistoryMessage {
   text: string
 }
 
+interface DecisionLogEntry {
+  id: number
+  turn: number
+  timestamp: string
+  user_message: string
+  emotion: string
+  emotion_reason: string
+  timing: string
+  action: string
+  affinity_prev: number
+  affinity_next: number
+  affinity_delta: number
+  affinity_reason: string
+  reasoning: string
+  away_mode: string
+  response_seconds: number | null
+  decision_prompt_tokens: number | null
+  decision_completion_tokens: number | null
+  reply_prompt_tokens: number | null
+  reply_completion_tokens: number | null
+  total_tokens: number | null
+}
+
 function nowHHMM(): string {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
@@ -49,6 +72,7 @@ export default function FriendView({ onExit }: Props) {
   const [cooldownArmed, setCooldownArmed] = useState(false)
   const [doubleTextArmed, setDoubleTextArmed] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
+  const [decisionLog, setDecisionLog] = useState<DecisionLogEntry[]>([])
 
   const idRef = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -93,6 +117,7 @@ export default function FriendView({ onExit }: Props) {
     setCooldownArmed(false)
     setDoubleTextArmed(false)
     setIsOnline(true)
+    setDecisionLog([])
     try {
       const r = await fetch('http://localhost:8000/api/v1/friend/reset', { method: 'POST' })
       const d = await r.json()
@@ -117,6 +142,14 @@ export default function FriendView({ onExit }: Props) {
     try {
       await fetch('http://localhost:8000/api/v1/friend/debug/double-text', { method: 'POST' })
       setDoubleTextArmed(true)
+    } catch {
+      // Debug helper only; keep the demo UI calm if the backend is not reachable.
+    }
+  }
+
+  const endCooldown = async () => {
+    try {
+      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown-end', { method: 'POST' })
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
     }
@@ -183,9 +216,56 @@ export default function FriendView({ onExit }: Props) {
                 ))
               } else if (typeof obj.affinity === 'number') {
                 setAffinity(obj.affinity)
+              } else if (obj.decision) {
+                const d = obj.decision
+                setDecisionLog(prev => [...prev, {
+                  id: ++idRef.current,
+                  turn: prev.length + 1,
+                  timestamp: nowHHMM(),
+                  user_message: String(d.user_message ?? ''),
+                  emotion: String(d.emotion ?? ''),
+                  emotion_reason: String(d.emotion_reason ?? ''),
+                  timing: String(d.timing ?? ''),
+                  action: String(d.action ?? ''),
+                  affinity_prev: Number(d.affinity_prev ?? 0),
+                  affinity_next: Number(d.affinity_next ?? 0),
+                  affinity_delta: Number(d.affinity_delta ?? 0),
+                  affinity_reason: String(d.affinity_reason ?? ''),
+                  reasoning: String(d.reasoning ?? ''),
+                  away_mode: String(d.away_mode ?? ''),
+                  response_seconds: null,
+                  decision_prompt_tokens: null,
+                  decision_completion_tokens: null,
+                  reply_prompt_tokens: null,
+                  reply_completion_tokens: null,
+                  total_tokens: null,
+                }])
+              } else if (obj.timing && typeof obj.timing.total_seconds === 'number') {
+                const secs = obj.timing.total_seconds
+                setDecisionLog(prev => {
+                  if (prev.length === 0) return prev
+                  const next = prev.slice()
+                  next[next.length - 1] = { ...next[next.length - 1], response_seconds: secs }
+                  return next
+                })
+              } else if (obj.tokens) {
+                const tk = obj.tokens
+                setDecisionLog(prev => {
+                  if (prev.length === 0) return prev
+                  const next = prev.slice()
+                  next[next.length - 1] = {
+                    ...next[next.length - 1],
+                    decision_prompt_tokens: typeof tk.decision_prompt === 'number' ? tk.decision_prompt : null,
+                    decision_completion_tokens: typeof tk.decision_completion === 'number' ? tk.decision_completion : null,
+                    reply_prompt_tokens: typeof tk.reply_prompt === 'number' ? tk.reply_prompt : null,
+                    reply_completion_tokens: typeof tk.reply_completion === 'number' ? tk.reply_completion : null,
+                    total_tokens: typeof tk.total === 'number' ? tk.total : null,
+                  }
+                  return next
+                })
               } else if (obj.status === 'cooldown') {
                 setIsOnline(false)
-                setIsTyping(true)
+                setIsTyping(false)
               } else if (obj.status === 'delayed') {
                 setIsTyping(true)
               } else if (obj.error) {
@@ -217,6 +297,73 @@ export default function FriendView({ onExit }: Props) {
 
   return (
     <div className="friend-view">
+      {showDebug && (
+        <div className="friend-decision-log">
+          <div className="friend-decision-log-header">
+            <span>decision log ({decisionLog.length})</span>
+            <button
+              className="friend-decision-log-clear"
+              onClick={() => setDecisionLog([])}
+              disabled={decisionLog.length === 0}
+            >
+              clear
+            </button>
+          </div>
+          <div className="friend-decision-log-body">
+            {decisionLog.length === 0 && (
+              <div className="friend-decision-log-empty">no turns yet</div>
+            )}
+            {decisionLog.slice().reverse().map(entry => (
+              <div key={entry.id} className="friend-decision-entry">
+                <div className="friend-decision-row top">
+                  <span className="friend-decision-turn">#{entry.turn}</span>
+                  <span className="friend-decision-time">{entry.timestamp}</span>
+                  {entry.response_seconds != null && (
+                    <span className="friend-decision-tag latency">{entry.response_seconds.toFixed(2)}s</span>
+                  )}
+                  {entry.away_mode && entry.away_mode !== 'normal' && (
+                    <span className="friend-decision-tag away">{entry.away_mode}</span>
+                  )}
+                </div>
+                <div className="friend-decision-user">› {entry.user_message}</div>
+                <div className="friend-decision-row">
+                  <span className="friend-decision-tag emo">{entry.emotion || '—'}</span>
+                  <span className="friend-decision-tag timing">{entry.timing || '—'}</span>
+                  {entry.action && entry.action !== 'normal' && (
+                    <span className="friend-decision-tag action">{entry.action}</span>
+                  )}
+                </div>
+                {entry.emotion_reason && (
+                  <div className="friend-decision-reason">why: {entry.emotion_reason}</div>
+                )}
+                <div className="friend-decision-row">
+                  <span className={`friend-decision-aff ${entry.affinity_delta > 0 ? 'up' : entry.affinity_delta < 0 ? 'down' : ''}`}>
+                    aff {entry.affinity_prev}→{entry.affinity_next} ({entry.affinity_delta >= 0 ? '+' : ''}{entry.affinity_delta})
+                  </span>
+                </div>
+                {entry.affinity_reason && (
+                  <div className="friend-decision-reason">{entry.affinity_reason}</div>
+                )}
+                {entry.total_tokens != null && (
+                  <div className="friend-decision-tokens">
+                    <span className="friend-decision-tag tok-total">{entry.total_tokens} tok</span>
+                    {entry.decision_prompt_tokens != null && entry.decision_completion_tokens != null && (
+                      <span className="friend-decision-tok-part">
+                        decision {entry.decision_prompt_tokens}+{entry.decision_completion_tokens}
+                      </span>
+                    )}
+                    {entry.reply_prompt_tokens != null && entry.reply_completion_tokens != null && (
+                      <span className="friend-decision-tok-part">
+                        reply {entry.reply_prompt_tokens}+{entry.reply_completion_tokens}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <aside className={`friend-stage stage-${expression}`}>
         <div className="friend-stage-inner">
           {(['joy', 'happy', 'neutral', 'annoyed', 'sulk'] as Expression[]).map(exp => (
@@ -274,6 +421,13 @@ export default function FriendView({ onExit }: Props) {
                 title="Force cooldown on next message"
               >
                 cooldown
+              </button>
+              <button
+                className="friend-debug-toggle"
+                onClick={endCooldown}
+                title="Skip the active cooldown wait"
+              >
+                cooldown_end
               </button>
               <button
                 className="friend-debug-toggle"
