@@ -43,4 +43,4 @@ export interface Lecture {
 }
 
 export type LessonState = 'idle' | 'playing' | 'paused' | 'question'
-export type AppMode = 'lesson' | 'friend' | 'playlist'
+export type AppMode = 'home' | 'agent-chat' | 'lesson' | 'playlist'
