@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from domain.agents.base import LessonTutor
+from domain.agents.lesson import BaseLessonAgent
 from domain.chat.messages import LessonChatInput
 
 
@@ -10,7 +10,7 @@ HISTORY_LIMIT = 50
 
 
 class LessonChatService:
-    def __init__(self, tutor: LessonTutor) -> None:
+    def __init__(self, tutor: BaseLessonAgent) -> None:
         self._tutor = tutor
         self._conversation_history: list[dict] = []
 

@@ -9,6 +9,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from domain.agents.problem_solver import BaseProblemSolverAgent
 from domain.problem_solving.autorater import AutoraterChatResult, AutoraterStartResult
 
 
@@ -18,11 +19,23 @@ if str(_BACKEND_ROOT) not in sys.path:
 load_dotenv(_BACKEND_ROOT / ".env", override=False)
 
 
-class AutoraterLegacyAdapter:
+class AutoraterLegacyAdapter(BaseProblemSolverAgent):
     def __init__(self) -> None:
         self._module = None
         self._error: str | None = None
         self._lock = threading.Lock()
+
+    @property
+    def agent_id(self) -> str:
+        return "isabella"
+
+    @property
+    def display_name(self) -> str:
+        return "Isabella"
+
+    def reset(self) -> None:
+        ar = self.get_module()
+        ar.reset_session()
 
     def get_module(self):
         if self._error:
@@ -49,6 +62,20 @@ class AutoraterLegacyAdapter:
             "strategy": strategy,
             "mode": ar.format_teaching_mode(strategy),
         }
+
+    def get_progress(self) -> dict:
+        ar = self.get_module()
+        return {
+            "current_problem": ar.CURRENT_PROBLEM,
+            "total_problems": ar.TOTAL_PROBLEMS,
+        }
+
+    def start_session(self, problem_sources: list[str]) -> AutoraterStartResult:
+        result, _snapshot = self.prepare_start(problem_sources)
+        return result
+
+    def reply(self, message: str, problem_sources: list[str] | None = None) -> AutoraterChatResult:
+        return self.chat(message, problem_sources)
 
     def prepare_start(self, image_paths: list[str]) -> tuple[AutoraterStartResult, dict[str, Any]]:
         ar = self.get_module()

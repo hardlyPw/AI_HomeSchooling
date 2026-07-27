@@ -1,44 +1,25 @@
 from __future__ import annotations
 
-from typing import Any, Iterator, Protocol
+from abc import ABC, abstractmethod
+from typing import Any
 
 
 StreamEvent = dict[str, Any]
 
 
-class ChatAgent(Protocol):
-    @property
-    def affinity(self) -> int:
-        ...
+class BaseAgent(ABC):
+    """Common identity contract shared by every content agent."""
 
     @property
-    def history(self) -> list[dict]:
-        ...
+    @abstractmethod
+    def agent_id(self) -> str:
+        raise NotImplementedError
 
+    @property
+    @abstractmethod
+    def display_name(self) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
     def reset(self) -> None:
-        ...
-
-    def stream_reply(self, user_message: str) -> Iterator[StreamEvent]:
-        ...
-
-
-class DebuggableFriendAgent(ChatAgent, Protocol):
-    def force_next_cooldown(self) -> None:
-        ...
-
-    def force_next_double_text(self) -> None:
-        ...
-
-    def end_cooldown(self) -> None:
-        ...
-
-
-class LessonTutor(Protocol):
-    def stream_reply(
-        self,
-        user_message: str,
-        conversation_history: list[dict] | None = None,
-        current_video_time: float | None = None,
-        figure_images: list[str] | None = None,
-    ) -> Iterator[str]:
-        ...
+        raise NotImplementedError

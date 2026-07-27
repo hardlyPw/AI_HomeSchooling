@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from domain.agents.base import DebuggableFriendAgent, StreamEvent
+from domain.agents.base import StreamEvent
+from domain.agents.conversation import BaseDebuggableConversationAgent
 
 
 class FriendChatService:
-    def __init__(self, agent: DebuggableFriendAgent) -> None:
+    def __init__(self, agent: BaseDebuggableConversationAgent) -> None:
         self._agent = agent
 
     @property

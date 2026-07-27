@@ -3,14 +3,23 @@ from __future__ import annotations
 from typing import Iterator
 
 from domain.agents.base import StreamEvent
+from domain.agents.conversation import BaseDebuggableConversationAgent
 from services.friend_service import FriendService
 
 
-class JihoLegacyAdapter:
+class JihoLegacyAdapter(BaseDebuggableConversationAgent):
     """Adapter around the existing AI_Friend-backed FriendService."""
 
     def __init__(self) -> None:
         self._service = FriendService()
+
+    @property
+    def agent_id(self) -> str:
+        return "jiho"
+
+    @property
+    def display_name(self) -> str:
+        return "Jiho"
 
     @property
     def affinity(self) -> int:
