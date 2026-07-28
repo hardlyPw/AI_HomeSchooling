@@ -1,17 +1,14 @@
 """Jiho 친구 Agent를 FastAPI 서버에서 쓰기 위한 서비스 계층.
 
 Agent/AI_Friend.py는 프롬프트, 장기기억, 호감도, 답변 생성 로직을 들고 있고,
-이 파일은 그 로직을 API 응답 형식에 맞게 감싸는 역할을 한다.
+이 파일은 runtime adapter를 통해 그 로직을 API 응답 형식에 맞게 감싸는 역할을 한다.
 프론트(FriendView)는 여기서 yield되는 dict들을 SSE 이벤트로 받아 채팅 UI를 갱신한다.
 """
 
 from __future__ import annotations
 
-import os
-import sys
 import threading
 import time
-from pathlib import Path
 from typing import Iterator
 
 from domain.agents.conversation import AvailabilityMode
@@ -21,35 +18,22 @@ from domain.agents.conversation_policy import (
     AwayDecision,
     ConversationTimingPolicy,
 )
-
-# Make Agent/AI_Friend.py importable
-_AGENT_DIR = Path(__file__).resolve().parents[2] / "Agent"
-if str(_AGENT_DIR) not in sys.path:
-    sys.path.insert(0, str(_AGENT_DIR))
-
-import AI_Friend as af  # noqa: E402
-
-# Server mode: silence the debug prompt dumps that AI_Friend.py prints in CLI
-af.DEBUG_PROMPT = False
+from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
 
 
 class FriendService:
     """FastAPI의 friend 라우터가 사용하는 Jiho 채팅 서비스.
 
     주된 역할:
-    - Agent/AI_Friend.py의 전역 상태를 서버용으로 초기화/관리한다.
+    - legacy runtime adapter를 통해 Jiho 상태를 서버용으로 초기화/관리한다.
     - 한 턴마다 장기기억 검색, decision layer, 답변 생성, 호감도 갱신을 순서대로 실행한다.
     - 프론트가 바로 처리할 수 있게 delta/decision/affinity/done 이벤트를 yield한다.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, runtime: AIFriendRuntime | None = None) -> None:
         """서버 시작 시 Jiho의 대화/호감도/쿨다운 상태를 깨끗하게 초기화한다."""
-        # Reset AI_Friend module state so each fresh service starts clean.
-        af.conversation_history.clear()
-        af.affinity = JIHO_PROFILE.initial_affinity
-        af.consecutive_negative = 0
-        af._cooldown_until = None
-        af._cooldown_reason = ""
+        self._runtime = runtime or AIFriendRuntime()
+        self._runtime.reset_state(JIHO_PROFILE.initial_affinity)
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
@@ -62,12 +46,12 @@ class FriendService:
     @property
     def affinity(self) -> int:
         """현재 Jiho 호감도(0~100)를 API 응답용으로 노출한다."""
-        return af.affinity
+        return self._runtime.affinity
 
     @property
     def history(self) -> list[dict]:
         """현재 서버 메모리에 쌓인 단기 대화 기록을 API 응답용으로 노출한다."""
-        return af.conversation_history
+        return self._runtime.conversation_history
 
     def reset(self) -> None:
         """디버그/데모용 전체 초기화.
@@ -75,24 +59,17 @@ class FriendService:
         프론트의 reset 버튼에서 호출된다. 단기기억, 호감도, 쿨다운, 강제 이벤트 플래그를
         초기화하고, 가능하면 Supabase의 데모 장기기억도 기본값으로 되돌린다.
         """
-        af.conversation_history.clear()
-        af.affinity = JIHO_PROFILE.initial_affinity
-        af.consecutive_negative = 0
-        af._cooldown_until = None
-        af._cooldown_reason = ""
+        self._runtime.reset_state(JIHO_PROFILE.initial_affinity)
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
         self._cooldown_skip_event.clear()
-        drain_pending = getattr(af, "_drain_pending_chunk", None)
-        if callable(drain_pending):
-            drain_pending()
         self._reset_long_term_memory_for_demo()
 
     def _reset_long_term_memory_for_demo(self) -> None:
         """Supabase RPC가 있을 때 데모용 장기기억 테이블을 초기 상태로 되돌린다."""
         try:
-            af.supabase.rpc("reset_friend_memories_v2_to_demo_seed", {}).execute()
+            self._runtime.reset_demo_long_term_memory()
         except Exception as exc:
             print(f"[FriendService] demo DB reset skipped: {exc!s:.200s}")
 
@@ -115,14 +92,14 @@ class FriendService:
         consecutive_negative를 관리하고, 최종 호감도는 0~100 사이로 제한한다.
         """
         result = self._affinity_policy.apply_delta(
-            current_affinity=af.affinity,
+            current_affinity=self._runtime.affinity,
             delta=delta,
-            consecutive_negative=af.consecutive_negative,
+            consecutive_negative=self._runtime.consecutive_negative,
             affinity_min=JIHO_PROFILE.affinity_min,
             affinity_max=JIHO_PROFILE.affinity_max,
         )
-        af.affinity = result.next_affinity
-        af.consecutive_negative = result.consecutive_negative
+        self._runtime.affinity = result.next_affinity
+        self._runtime.consecutive_negative = result.consecutive_negative
         return result.previous_affinity
 
     def _pick_away_decision(self) -> AwayDecision:
@@ -136,7 +113,7 @@ class FriendService:
         대화가 길어질수록 away 확률이 올라가고, 디버그 플래그가 있으면 강제로 cooldown을 만든다.
         """
         result = self._timing_policy.pick_away_decision(
-            turn_count=len(af.conversation_history) // 2,
+            turn_count=len(self._runtime.conversation_history) // 2,
             away_count=self._away_count,
             force_cooldown=self._force_next_cooldown,
         )
@@ -173,15 +150,15 @@ class FriendService:
                 time.sleep(away.wait_seconds)
 
         # Long-term RAG retrieval (top_k uses CURRENT affinity, before LLM delta)
-        top_k = 1 if af.affinity <= 40 else 5
-        if af.USE_LONG_TERM_MEMORY:
-            long_term = af.get_long_term_memory(user_message, top_k=top_k)
+        top_k = 1 if self._runtime.affinity <= 40 else 5
+        if self._runtime.uses_long_term_memory:
+            long_term = self._runtime.get_long_term_memory(user_message, top_k=top_k)
         else:
             long_term = []
 
         # Decision Layer (gpt-4o-mini): emotion + timing + action + session_break + affinity_delta
-        time_str, time_ctx = af._consume_time_context_for_turn()
-        decision = af.make_decision(user_message, long_term, time_str, time_ctx)
+        time_str, time_ctx = self._runtime.consume_time_context_for_turn()
+        decision = self._runtime.make_decision(user_message, long_term, time_str, time_ctx)
         if self._force_next_double_text:
             self._force_next_double_text = False
             decision = dict(decision)
@@ -194,9 +171,9 @@ class FriendService:
         # Apply LLM-judged affinity delta from the decision layer (replaces keyword stub)
         aff_delta = int(decision.get("affinity_delta", 0))
         old_affinity = self._apply_delta(aff_delta)
-        actual_change = af.affinity - old_affinity
+        actual_change = self._runtime.affinity - old_affinity
         print(
-            f"[호감도] {old_affinity} → {af.affinity} "
+            f"[호감도] {old_affinity} → {self._runtime.affinity} "
             f"({actual_change:+d}) | {decision.get('affinity_reason', '')}"
         )
 
@@ -209,7 +186,7 @@ class FriendService:
                 "timing": decision.get("timing", ""),
                 "action": decision.get("action", ""),
                 "affinity_prev": old_affinity,
-                "affinity_next": af.affinity,
+                "affinity_next": self._runtime.affinity,
                 "affinity_delta": actual_change,
                 "affinity_reason": decision.get("affinity_reason", ""),
                 "reasoning": decision.get("reasoning", ""),
@@ -218,7 +195,7 @@ class FriendService:
         }
 
         # Build prompt with full persona + RAG + STM + decision cues + emotion
-        prompt = af.build_prompt(
+        prompt = self._runtime.build_prompt(
             user_input=user_message,
             long_term_memories=long_term,
             long_term_k=top_k,
@@ -228,8 +205,8 @@ class FriendService:
             time_ctx=time_ctx,
         )
 
-        # Stream reply (AI_Friend.generate_ai_response is non-streaming, so we
-        # call the openai client directly with stream=True here)
+        # Stream reply. Double-text uses the legacy non-streaming generator;
+        # normal replies use the runtime adapter's streaming client.
         llm_started = time.perf_counter()
         collected: list[str] = []
         first_delta_seconds: float | None = None
@@ -245,8 +222,8 @@ class FriendService:
 
         if decision.get("timing") == "double_text":
             # double_text는 실제 스트리밍 대신 한 번 생성한 답변을 두 말풍선으로 나눠 보낸다.
-            ai_raw = af.generate_ai_response(prompt)
-            ai_replies = af._split_double_text(ai_raw)
+            ai_raw = self._runtime.generate_response(prompt)
+            ai_replies = self._runtime.split_double_text(ai_raw)
             for idx, msg in enumerate(ai_replies):
                 if idx > 0:
                     yield {"message_break": True}
@@ -254,20 +231,13 @@ class FriendService:
                     first_delta_seconds = time.perf_counter() - llm_started
                 collected.append((" " if collected else "") + msg)
                 yield {"delta": msg}
-            usage = getattr(af, "last_response_usage", None)
+            usage = self._runtime.last_response_usage
             if usage:
                 reply_prompt_tokens = usage.get("prompt_tokens")
                 reply_completion_tokens = usage.get("completion_tokens")
         else:
             # 일반 답변은 GPT stream=True를 사용해서 토큰 단위 delta를 프론트로 보낸다.
-            stream = af.openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": prompt}],
-                temperature=0.8,
-                max_tokens=300,
-                stream=True,
-                stream_options={"include_usage": True},
-            )
+            stream = self._runtime.stream_response(prompt)
 
             for chunk in stream:
                 if getattr(chunk, "usage", None) is not None:
@@ -286,13 +256,12 @@ class FriendService:
         reply = "".join(collected).strip() or "brb"
 
         # Short-term memory: append both sides for next turn's context
-        af.conversation_history.append({"role": "user", "text": user_message})
-        af.conversation_history.append({"role": "ai",   "text": reply})
+        self._runtime.append_turn_to_short_term_memory(user_message, reply)
 
         # Long-term memory: feed into the chunk consolidator (5-min idle or
         # session_break triggers the gpt-4o-mini extraction → friend_memories_v2)
         try:
-            af.record_turn(
+            self._runtime.record_turn(
                 user_message,
                 reply,
                 session_break=bool(decision.get("session_break", False)),
@@ -337,5 +306,5 @@ class FriendService:
                 "total": sum(token_components) if any(token_components) else None,
             }
         }
-        yield {"affinity": af.affinity, "affinity_prev": old_affinity}
+        yield {"affinity": self._runtime.affinity, "affinity_prev": old_affinity}
         yield {"done": True}
