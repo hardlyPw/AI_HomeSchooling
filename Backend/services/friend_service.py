@@ -8,12 +8,18 @@ Agent/AI_Friend.py는 프롬프트, 장기기억, 호감도, 답변 생성 로�
 from __future__ import annotations
 
 import os
-import random
 import sys
 import threading
 import time
 from pathlib import Path
 from typing import Iterator
+
+from domain.agents.conversation import AvailabilityMode, ConversationBehaviorConfig
+from domain.agents.conversation_policy import (
+    AffinityPolicy,
+    AwayDecision,
+    ConversationTimingPolicy,
+)
 
 # Make Agent/AI_Friend.py importable
 _AGENT_DIR = Path(__file__).resolve().parents[2] / "Agent"
@@ -40,16 +46,6 @@ COOLDOWN_REASONS = (
 )
 
 
-class AwayDecision:
-    """Jiho가 이번 턴에 바로 답할지, 늦게 답할지, 자리를 비울지 담는 값 객체."""
-
-    def __init__(self, mode: str = "normal", wait_seconds: int = 0, reason: str = "") -> None:
-        """mode는 normal/delayed/cooldown 중 하나로 쓰이고, wait_seconds는 대기 시간이다."""
-        self.mode = mode
-        self.wait_seconds = wait_seconds
-        self.reason = reason
-
-
 class FriendService:
     """FastAPI의 friend 라우터가 사용하는 Jiho 채팅 서비스.
 
@@ -71,6 +67,16 @@ class FriendService:
         self._force_next_cooldown = False
         self._force_next_double_text = False
         self._cooldown_skip_event = threading.Event()
+        self._behavior = ConversationBehaviorConfig(
+            delay_turn_threshold=DELAY_TURN_THRESHOLD,
+            early_away_probability=EARLY_AWAY_PROBABILITY,
+            late_away_probability=LATE_AWAY_PROBABILITY,
+            always_cooldown_probability=ALWAYS_COOLDOWN_PROBABILITY,
+            cooldown_seconds=COOLDOWN_SECONDS,
+            cooldown_reasons=COOLDOWN_REASONS,
+        )
+        self._timing_policy = ConversationTimingPolicy(self._behavior)
+        self._affinity_policy = AffinityPolicy(self._behavior)
 
     # ── State exposed to api/v1/friend.py ─────────────────────────────
     @property
@@ -128,15 +134,14 @@ class FriendService:
         반환값은 변경 전 호감도다. 연속으로 부정적인 delta가 나오면 더 크게 깎이도록
         consecutive_negative를 관리하고, 최종 호감도는 0~100 사이로 제한한다.
         """
-        if delta < 0:
-            af.consecutive_negative += 1
-            if af.consecutive_negative >= 3:
-                delta *= 2
-        else:
-            af.consecutive_negative = 0
-        old = af.affinity
-        af.affinity = max(0, min(100, af.affinity + delta))
-        return old
+        result = self._affinity_policy.apply_delta(
+            current_affinity=af.affinity,
+            delta=delta,
+            consecutive_negative=af.consecutive_negative,
+        )
+        af.affinity = result.next_affinity
+        af.consecutive_negative = result.consecutive_negative
+        return result.previous_affinity
 
     def _pick_away_decision(self) -> AwayDecision:
         """이번 턴에서 Jiho의 응답 타이밍을 결정한다.
@@ -148,37 +153,15 @@ class FriendService:
 
         대화가 길어질수록 away 확률이 올라가고, 디버그 플래그가 있으면 강제로 cooldown을 만든다.
         """
-        if self._force_next_cooldown:
+        result = self._timing_policy.pick_away_decision(
+            turn_count=len(af.conversation_history) // 2,
+            away_count=self._away_count,
+            force_cooldown=self._force_next_cooldown,
+        )
+        self._away_count = result.away_count
+        if result.consumed_forced_cooldown:
             self._force_next_cooldown = False
-            return self._begin_cooldown()
-
-        if random.random() < ALWAYS_COOLDOWN_PROBABILITY:
-            return self._begin_cooldown()
-
-        turn_count = len(af.conversation_history) // 2
-        away_probability = (
-            EARLY_AWAY_PROBABILITY
-            if turn_count < DELAY_TURN_THRESHOLD
-            else LATE_AWAY_PROBABILITY
-        )
-        if random.random() >= away_probability:
-            return AwayDecision()
-
-        self._away_count += 1
-        if self._away_count <= 3:
-            return AwayDecision(mode="delayed", wait_seconds=30)
-        if self._away_count == 4:
-            return AwayDecision(mode="delayed", wait_seconds=60)
-        return self._begin_cooldown()
-
-    def _begin_cooldown(self) -> AwayDecision:
-        """cooldown AwayDecision을 만든다. reason은 답장 prefix에만 쓰인다."""
-        self._away_count += 1
-        return AwayDecision(
-            mode="cooldown",
-            wait_seconds=COOLDOWN_SECONDS,
-            reason=random.choice(COOLDOWN_REASONS),
-        )
+        return result.decision
 
     # ── Streaming reply ──────────────────────────────────────────────
     def stream_reply(self, user_message: str) -> Iterator[dict]:
@@ -198,10 +181,10 @@ class FriendService:
         turn_started = time.perf_counter()
         away = self._pick_away_decision()
 
-        if away.mode in {"delayed", "cooldown"}:
+        if away.mode in {AvailabilityMode.DELAYED, AvailabilityMode.COOLDOWN}:
             # 프론트는 status 이벤트를 보고 typing/offline 상태를 먼저 바꾼다.
-            yield {"status": away.mode, "wait_seconds": away.wait_seconds}
-            if away.mode == "cooldown":
+            yield {"status": away.mode.value, "wait_seconds": away.wait_seconds}
+            if away.mode == AvailabilityMode.COOLDOWN:
                 self._cooldown_skip_event.wait(timeout=away.wait_seconds)
                 self._cooldown_skip_event.clear()
             else:
@@ -248,7 +231,7 @@ class FriendService:
                 "affinity_delta": actual_change,
                 "affinity_reason": decision.get("affinity_reason", ""),
                 "reasoning": decision.get("reasoning", ""),
-                "away_mode": away.mode,
+                "away_mode": away.mode.value,
             }
         }
 
@@ -268,7 +251,7 @@ class FriendService:
         llm_started = time.perf_counter()
         collected: list[str] = []
         first_delta_seconds: float | None = None
-        if away.mode == "cooldown":
+        if away.mode == AvailabilityMode.COOLDOWN:
             # cooldown 뒤 돌아왔다는 느낌을 주기 위해 첫 말 앞에 짧은 excuse를 붙인다.
             prefix = f"yo sry was {away.reason}."
             collected.append(prefix)
@@ -347,7 +330,7 @@ class FriendService:
             f"total={total_seconds:.2f}s "
             f"llm_stream={llm_seconds:.2f}s "
             f"first_delta={first_delta_text} "
-            f"mode={away.mode} "
+            f"mode={away.mode.value} "
             f"wait={away.wait_seconds}s "
             f"user_chars={len(user_message)} "
             f"reply_chars={len(reply)}"
