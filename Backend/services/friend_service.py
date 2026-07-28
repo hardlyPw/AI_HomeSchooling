@@ -14,7 +14,8 @@ import time
 from pathlib import Path
 from typing import Iterator
 
-from domain.agents.conversation import AvailabilityMode, ConversationBehaviorConfig
+from domain.agents.conversation import AvailabilityMode
+from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
 from domain.agents.conversation_policy import (
     AffinityPolicy,
     AwayDecision,
@@ -32,20 +33,6 @@ import AI_Friend as af  # noqa: E402
 af.DEBUG_PROMPT = False
 
 
-DELAY_TURN_THRESHOLD = 50
-EARLY_AWAY_PROBABILITY = 0.01
-LATE_AWAY_PROBABILITY = 0.10
-ALWAYS_COOLDOWN_PROBABILITY = 0.001
-COOLDOWN_SECONDS = 5 * 60
-COOLDOWN_REASONS = (
-    "in a game",
-    "eating",
-    "watching yt",
-    "in the shower",
-    "looking for my charger",
-)
-
-
 class FriendService:
     """FastAPI의 friend 라우터가 사용하는 Jiho 채팅 서비스.
 
@@ -59,7 +46,7 @@ class FriendService:
         """서버 시작 시 Jiho의 대화/호감도/쿨다운 상태를 깨끗하게 초기화한다."""
         # Reset AI_Friend module state so each fresh service starts clean.
         af.conversation_history.clear()
-        af.affinity = 70
+        af.affinity = JIHO_PROFILE.initial_affinity
         af.consecutive_negative = 0
         af._cooldown_until = None
         af._cooldown_reason = ""
@@ -67,14 +54,7 @@ class FriendService:
         self._force_next_cooldown = False
         self._force_next_double_text = False
         self._cooldown_skip_event = threading.Event()
-        self._behavior = ConversationBehaviorConfig(
-            delay_turn_threshold=DELAY_TURN_THRESHOLD,
-            early_away_probability=EARLY_AWAY_PROBABILITY,
-            late_away_probability=LATE_AWAY_PROBABILITY,
-            always_cooldown_probability=ALWAYS_COOLDOWN_PROBABILITY,
-            cooldown_seconds=COOLDOWN_SECONDS,
-            cooldown_reasons=COOLDOWN_REASONS,
-        )
+        self._behavior = JIHO_BEHAVIOR
         self._timing_policy = ConversationTimingPolicy(self._behavior)
         self._affinity_policy = AffinityPolicy(self._behavior)
 
@@ -96,7 +76,7 @@ class FriendService:
         초기화하고, 가능하면 Supabase의 데모 장기기억도 기본값으로 되돌린다.
         """
         af.conversation_history.clear()
-        af.affinity = 70
+        af.affinity = JIHO_PROFILE.initial_affinity
         af.consecutive_negative = 0
         af._cooldown_until = None
         af._cooldown_reason = ""
@@ -138,6 +118,8 @@ class FriendService:
             current_affinity=af.affinity,
             delta=delta,
             consecutive_negative=af.consecutive_negative,
+            affinity_min=JIHO_PROFILE.affinity_min,
+            affinity_max=JIHO_PROFILE.affinity_max,
         )
         af.affinity = result.next_affinity
         af.consecutive_negative = result.consecutive_negative
