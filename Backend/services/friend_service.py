@@ -12,6 +12,7 @@ import time
 from typing import Iterator
 
 from domain.agents.conversation import AvailabilityMode
+from domain.agents.friend_runtime import FriendRuntime
 from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
 from domain.agents.conversation_policy import (
     AffinityPolicy,
@@ -30,7 +31,7 @@ class FriendService:
     - 프론트가 바로 처리할 수 있게 delta/decision/affinity/done 이벤트를 yield한다.
     """
 
-    def __init__(self, runtime: AIFriendRuntime | None = None) -> None:
+    def __init__(self, runtime: FriendRuntime | None = None) -> None:
         """서버 시작 시 Jiho의 대화/호감도/쿨다운 상태를 깨끗하게 초기화한다."""
         self._runtime = runtime or AIFriendRuntime()
         self._runtime.reset_state(JIHO_PROFILE.initial_affinity)
