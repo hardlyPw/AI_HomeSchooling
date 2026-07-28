@@ -1,71 +1,66 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from typing import Iterator
+from collections.abc import Iterator
+from types import ModuleType
 
-_AGENT_DIR = Path(__file__).resolve().parents[3] / "Agent"
-if str(_AGENT_DIR) not in sys.path:
-    sys.path.insert(0, str(_AGENT_DIR))
-
-import AI_Friend as af  # noqa: E402
+from infrastructure.adapters.ai_friend_decision import AIFriendDecisionClient
+from infrastructure.adapters.ai_friend_memory import AIFriendMemoryRepository
+from infrastructure.adapters.ai_friend_module import load_ai_friend_module
+from infrastructure.adapters.ai_friend_prompt import AIFriendPromptBuilder
+from infrastructure.adapters.ai_friend_response import AIFriendResponseGenerator
+from infrastructure.adapters.ai_friend_state import AIFriendStateAdapter
 
 
 class AIFriendRuntime:
-    """Infrastructure adapter around the legacy Agent/AI_Friend.py module."""
+    """Facade that composes focused adapters around Agent/AI_Friend.py."""
 
-    def __init__(self) -> None:
-        af.DEBUG_PROMPT = False
+    def __init__(self, module: ModuleType | None = None) -> None:
+        legacy_module = module or load_ai_friend_module()
+        self._state = AIFriendStateAdapter(legacy_module)
+        self._memory = AIFriendMemoryRepository(legacy_module)
+        self._decision = AIFriendDecisionClient(legacy_module)
+        self._prompt = AIFriendPromptBuilder(legacy_module)
+        self._response = AIFriendResponseGenerator(legacy_module)
 
     @property
     def affinity(self) -> int:
-        return af.affinity
+        return self._state.affinity
 
     @affinity.setter
     def affinity(self, value: int) -> None:
-        af.affinity = value
+        self._state.affinity = value
 
     @property
     def consecutive_negative(self) -> int:
-        return af.consecutive_negative
+        return self._state.consecutive_negative
 
     @consecutive_negative.setter
     def consecutive_negative(self, value: int) -> None:
-        af.consecutive_negative = value
+        self._state.consecutive_negative = value
 
     @property
     def conversation_history(self) -> list[dict]:
-        return af.conversation_history
+        return self._state.conversation_history
 
     @property
     def uses_long_term_memory(self) -> bool:
-        return af.USE_LONG_TERM_MEMORY
+        return self._memory.uses_long_term_memory
 
     @property
     def last_response_usage(self) -> dict | None:
-        return getattr(af, "last_response_usage", None)
+        return self._response.last_response_usage
 
     def reset_state(self, initial_affinity: int) -> None:
-        af.conversation_history.clear()
-        af.affinity = initial_affinity
-        af.consecutive_negative = 0
-        af._cooldown_until = None
-        af._cooldown_reason = ""
-        self.drain_pending_chunk()
-
-    def drain_pending_chunk(self) -> None:
-        drain_pending = getattr(af, "_drain_pending_chunk", None)
-        if callable(drain_pending):
-            drain_pending()
+        self._state.reset(initial_affinity)
 
     def reset_demo_long_term_memory(self) -> None:
-        af.supabase.rpc("reset_friend_memories_v2_to_demo_seed", {}).execute()
+        self._memory.reset_demo_long_term_memory()
 
     def get_long_term_memory(self, query_text: str, top_k: int) -> list[dict]:
-        return af.get_long_term_memory(query_text, top_k=top_k)
+        return self._memory.get_long_term_memory(query_text, top_k)
 
     def consume_time_context_for_turn(self) -> tuple[str, str]:
-        return af._consume_time_context_for_turn()
+        return self._decision.consume_time_context_for_turn()
 
     def make_decision(
         self,
@@ -74,7 +69,12 @@ class AIFriendRuntime:
         time_str: str,
         time_context: str,
     ) -> dict:
-        return af.make_decision(user_message, long_term_memory, time_str, time_context)
+        return self._decision.make_decision(
+            user_message,
+            long_term_memory,
+            time_str,
+            time_context,
+        )
 
     def build_prompt(
         self,
@@ -87,7 +87,7 @@ class AIFriendRuntime:
         time_str: str,
         time_ctx: str,
     ) -> str:
-        return af.build_prompt(
+        return self._prompt.build_prompt(
             user_input=user_input,
             long_term_memories=long_term_memories,
             long_term_k=long_term_k,
@@ -98,24 +98,16 @@ class AIFriendRuntime:
         )
 
     def generate_response(self, prompt: str) -> str:
-        return af.generate_ai_response(prompt)
+        return self._response.generate_response(prompt)
 
     def split_double_text(self, response: str) -> list[str]:
-        return af._split_double_text(response)
+        return self._response.split_double_text(response)
 
     def stream_response(self, prompt: str) -> Iterator:
-        return af.openai_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "system", "content": prompt}],
-            temperature=0.8,
-            max_tokens=300,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+        return self._response.stream_response(prompt)
 
     def append_turn_to_short_term_memory(self, user_message: str, reply: str) -> None:
-        af.conversation_history.append({"role": "user", "text": user_message})
-        af.conversation_history.append({"role": "ai", "text": reply})
+        self._state.append_turn(user_message, reply)
 
     def record_turn(self, user_message: str, reply: str, session_break: bool) -> None:
-        af.record_turn(user_message, reply, session_break=session_break)
+        self._memory.record_turn(user_message, reply, session_break)
