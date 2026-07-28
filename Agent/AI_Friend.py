@@ -1,20 +1,19 @@
 import os
 import sys
 import json
-import threading
 import atexit
 from dotenv import load_dotenv
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 
-import math
 import random
-from datetime import datetime, timezone, timedelta
-from typing import Any, cast
+from datetime import datetime, timedelta
 
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
 import time
+from jiho_decision_prompt import render_jiho_decision_prompt
+from jiho_memory_repository import JihoMemoryRepository
 from jiho_prompt import ROLE_DISPLAY, render_jiho_prompt
 
 # Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
@@ -57,15 +56,18 @@ DEBUG_PROMPT = True  # True 로 설정하면 프롬프트 조립 과정을 출�
 # True  = 풀 시스템 (RAG 활성화)
 USE_LONG_TERM_MEMORY = True
 
+_memory_repository = JihoMemoryRepository(
+    supabase_client=supabase,
+    embedding_model=model,
+    openai_client=openai_client,
+    memory_table=MEMORY_TABLE,
+    memory_match_rpc=MEMORY_MATCH_RPC,
+    session_timeout_seconds=SESSION_TIMEOUT_SECONDS,
+    uses_long_term_memory=lambda: USE_LONG_TERM_MEMORY,
+)
+
 affinity: int = 70             # 호감도 (0~100)
 consecutive_negative: int = 0  # 연속 마이너스 횟수
-
-# ── 백그라운드 메모리 state ─────────────────────────────────────────
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="memory")
-_pending_chunk_lock = threading.Lock()
-_pending_chunk: list[dict] = []  # [{user, ai, importance, ts}, ...]
-_session_timer_lock = threading.Lock()
-_session_timer: threading.Timer | None = None
 
 # ── 쿨다운 / 행동 레이어 상태 ──────────────────────────────────────
 _cooldown_until: datetime | None = None
@@ -102,249 +104,22 @@ INITIAL_HISTORY: list[dict] = [
 
 conversation_history: list[dict] = []
 
-# ── 장기기억: 벡터 검색 + 점수 산출 ────────────────────────────────
+# ── 장기기억: repository wrapper ───────────────────────────────────
 def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
-    start_embed = time.time()
-    query_vector = model.encode(query_text).tolist()
-    print(f"[Latency] 임베딩 변환: {time.time() - start_embed:.4f}초")
-
-    start_db = time.time()
-    response = supabase.rpc(MEMORY_MATCH_RPC, {
-        "query_embedding": query_vector,
-        "match_threshold": 0.0,
-        "match_count": 50
-    }).execute()
-    print(f"[Latency] 장기기억 검색: {time.time() - start_db:.4f}초")
-
-    candidates = cast(list[dict[str, Any]], response.data) if isinstance(response.data, list) else []
-    if not candidates:
-        return []
-
-    now = datetime.now(timezone.utc)
-    temp_list = []
-    for item in candidates:
-        rel_raw = float(item.get("similarity", 0.0))
-        imp_raw = float(item.get("poignancy", 3.0))
-        created_at_str = item.get("created_at")
-        if isinstance(created_at_str, str):
-            created_time = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-            hours_passed = max(0.0, (now - created_time).total_seconds() / 3600.0)
-        else:
-            hours_passed = 1000.0
-        rec_raw = float(math.pow(0.99, hours_passed))
-        temp_list.append({"item": item, "rel_raw": rel_raw, "imp_raw": imp_raw, "rec_raw": rec_raw})
-
-    def normalize(values: list[float]) -> list[float]:
-        min_val, max_val = min(values), max(values)
-        if max_val == min_val:
-            return [1.0] * len(values)
-        return [(v - min_val) / (max_val - min_val) for v in values]
-
-    rel_norm = normalize([x["rel_raw"] for x in temp_list])
-    imp_norm = normalize([x["imp_raw"] for x in temp_list])
-    rec_norm = normalize([x["rec_raw"] for x in temp_list])
-
-    scored = []
-    for i, t in enumerate(temp_list):
-        # relevance(임베딩 유사도) 가중치 강화: rel*5 + imp*1 + rec*0.3
-        # entity name 보존 후에도 Q3/Q4/Q7에서 무관 메모리가 top-1 차지하던 문제 대응.
-        total = rel_norm[i] * 5 + imp_norm[i] * 1 + rec_norm[i] * 0.3
-        orig = t["item"]
-        scored.append({
-            "description": str(orig.get("description", "")),
-            "score":       round(total, 3),
-        })
-
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    top = scored[:top_k]
-    for i, m in enumerate(top, 1):
-        print(f"[Memory] TOP{i}: {m['description']}, score={m['score']}")
-    return top
-
-# ── 메모리 저장 공통 헬퍼 ────────────────────────────────────────────
-def _save_memory(memory_type: str, description: str, poignancy: int) -> None:
-    try:
-        embedding = model.encode(description).tolist()
-        supabase.table(MEMORY_TABLE).insert({
-            "type":             memory_type,
-            "description":      description,
-            "embedding_vector": embedding,
-            "poignancy":        poignancy,
-        }).execute()
-        print(f"[Memory] {memory_type} 저장 (poignancy={poignancy}): {description[:60]}...")
-    except Exception as e:
-        print(f"[Memory] 저장 실패 ({memory_type}): {e!s:.200s}")
+    return _memory_repository.get_long_term_memory(query_text, top_k=top_k)
 
 
-# ── 트리거 ──────────────────────────────────────────────────────────
 def _drain_pending_chunk() -> list[dict]:
-    with _pending_chunk_lock:
-        chunk = list(_pending_chunk)
-        _pending_chunk.clear()
-    return chunk
+    return _memory_repository.drain_pending_chunk()
 
 
-def _trigger_session_end() -> None:
-    """5분 timer 또는 atexit에서 호출됨. atexit 시점엔 ThreadPoolExecutor가 이미
-    shutdown 상태일 수 있어서 submit 못 함 → 동기 직접 호출. 5분 timer 경우는
-    별도 daemon thread에서 호출되니 동기 block돼도 main 영향 없음."""
-    print("[Memory] 세션 종료 감지 (chat 마무리)")
-    chunk = _drain_pending_chunk()
-    if not chunk:
-        return
-    _create_chat_memory(chunk)
-
-
-def _trigger_session_end_async(reason: str) -> None:
-    """메인 루프에서 호출되는 비동기 버전. session_break 신호 등."""
-    chunk = _drain_pending_chunk()
-    if not chunk:
-        return
-    print(f"[Memory] 세션 종료 ({reason}) → chat async 추출")
-    _executor.submit(_create_chat_memory, chunk)
-
-
-# ── chat description 생성 (세션 전체 요약 — content layer) ──────────
-def _create_chat_memory(chunk: list[dict]) -> None:
-    convo_text = "\n".join(
-        f"User: {c['user']}\nJiho: {c['ai']}"
-        for c in chunk
-    )
-
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": (
-                    "You extract distinct factual memories from a chat session. "
-                    "Output only valid JSON."
-                )},
-                {"role": "user", "content": (
-                    f"[Chat Log]\n{convo_text}\n\n"
-                    "[Task]\n"
-                    "Extract AT MOST 3 memory entries from this entire session. "
-                    "Return an empty list if the session is small talk with nothing "
-                    "referenceable later.\n\n"
-                    "[DIVERSIFICATION rule — critical]\n"
-                    "Each entry MUST cover a DIFFERENT angle (different person, event, "
-                    "decision, fact, OR feeling). Never paraphrase the same event from "
-                    "another wording. If the session has only 1 distinct angle, return "
-                    "1 entry — don't pad with rewordings. Use 2 only when there are "
-                    "clearly separate angles, 3 only in rich sessions.\n\n"
-                    "[DETAIL rule]\n"
-                    "Each entry: 1-2 sentences, self-contained. Include who, what, "
-                    "where, and what the user felt/decided. A future reader should "
-                    "understand the entry without seeing the original chat log. Concrete "
-                    "details (specific game/song/place/teacher/friend) > abstract summaries.\n\n"
-                    "[NAMED ENTITY rule]\n"
-                    "PRESERVE names verbatim when present: friends (Leo, Jules, Nina, "
-                    "Chris, Ryan, Ethan, Maya, etc.), teachers (Ms. Lin, Mrs. Kim, "
-                    "Ms. Carter, Coach Reed, etc.), games (LoL, Valorant, Minecraft, "
-                    "Ahri, Faker), places (Split, etc.), songs, brands. Do NOT generalize "
-                    "to 'a friend', 'his classmate', 'a teacher', 'a game'.\n\n"
-                    "[VOICE rule]\n"
-                    "- Third-person factual notes about the user.\n"
-                    "- Don't include 'Jiho' or 'the AI said' (the persona itself). "
-                    "Other people's names ARE included per the rule above.\n"
-                    "- No meta-commentary.\n\n"
-                    "[GOOD example — 3 entries on different angles]\n"
-                    "- \"User queued Ahri mid late at night and tunnel-visioned on minions, "
-                    "getting ganked twice; Ryan called him out for it.\"\n"
-                    "- \"User's mom interrupted during champ select to ask about unfinished "
-                    "math corrections, then gave the disappointed look.\"\n"
-                    "- \"User decided to review a replay instead of spam queueing tilted, "
-                    "and wants to hit gold before break.\"\n\n"
-                    "[BAD example — paraphrasing same event 3 times, do NOT do this]\n"
-                    "- \"User struggled with Ahri mid and got ganked.\"\n"
-                    "- \"User played Ahri and felt unfairly ganked twice.\"\n"
-                    "- \"User had a tough Ahri mid game with multiple ganks.\"\n\n"
-                    "[Poignancy 1-5]\n"
-                    "- 1: small talk, nothing referenceable later (omit instead)\n"
-                    "- 2: minor detail, low future relevance\n"
-                    "- 3: ordinary, contains a concrete fact\n"
-                    "- 4: notable — recurring theme OR clear emotional weight\n"
-                    "- 5: emotionally intense OR a major decision/event for the user\n\n"
-                    'Output JSON: {"entries": [{"description": "...", "poignancy": <1-5>}, ...]}'
-                )},
-            ],
-            max_tokens=1200,
-            temperature=0,
-            response_format={"type": "json_object"},
-        )
-        raw = (response.choices[0].message.content or "").strip()
-        parsed = json.loads(raw)
-        entries = parsed.get("entries", [])
-        if not isinstance(entries, list):
-            print("[Memory] chat 추출 결과 형식 오류")
-            return
-    except Exception as e:
-        print(f"[Memory] chat description 생성 실패: {e!s:.200s}")
-        return
-
-    saved = 0
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        description = str(entry.get("description", "")).strip()
-        if not description:
-            continue
-        try:
-            poignancy = max(1, min(5, int(entry.get("poignancy", 3))))
-        except (TypeError, ValueError):
-            poignancy = 3
-        _save_memory("chat", description, poignancy)
-        saved += 1
-
-    if saved == 0:
-        print("[Memory] chat 추출 결과 없음 (filler chunk)")
-    else:
-        print(f"[Memory] chat description {saved}개 저장")
-
-
-# ── 세션 timer (매 발화마다 reset, 5분 후 _trigger_session_end) ─────
-def _reset_session_timer() -> None:
-    global _session_timer
-    with _session_timer_lock:
-        if _session_timer is not None:
-            _session_timer.cancel()
-        _session_timer = threading.Timer(SESSION_TIMEOUT_SECONDS, _trigger_session_end)
-        _session_timer.daemon = True
-        _session_timer.start()
-
-
-# ── public API (매 chat turn 후 호출) ────────────────────────────────
 def record_turn(user_text: str, ai_text: str, session_break: bool = False) -> None:
-    global _session_timer
-    if not USE_LONG_TERM_MEMORY:
-        return
-    with _pending_chunk_lock:
-        _pending_chunk.append({
-            "user": user_text,
-            "ai":   ai_text,
-            "ts":   datetime.now(timezone.utc).isoformat(),
-        })
-        n = len(_pending_chunk)
-    print(f"[Memory] turn 누적: {n} (session 단위 flush 대기)")
-    if session_break:
-        # decision layer가 자연스러운 세션 종료 감지 → 즉시 flush, 5분 timer 취소
-        with _session_timer_lock:
-            if _session_timer is not None:
-                _session_timer.cancel()
-                _session_timer = None
-        _trigger_session_end_async("session_break")
-        return
-    _reset_session_timer()
+    _memory_repository.record_turn(user_text, ai_text, session_break=session_break)
 
 
 def memory_shutdown() -> None:
     """프로세스 종료 시 pending 세션을 chat 으로 마무리."""
-    if not USE_LONG_TERM_MEMORY:
-        return
-    with _session_timer_lock:
-        if _session_timer is not None:
-            _session_timer.cancel()
-    _trigger_session_end()
-    _executor.shutdown(wait=True, cancel_futures=False)
+    _memory_repository.shutdown()
 
 # ── 행동 결정 레이어 (1st API call) ─────────────────────────────────
 def _get_time_context() -> tuple[str, str]:
@@ -415,81 +190,15 @@ def make_decision(
         _cooldown_until = None
         _cooldown_reason = ""
 
-    recent = "\n".join(
-        f"{ROLE_DISPLAY.get(m['role'], m['role'])}: {m['text']}"
-        for m in conversation_history[-8:]
+    system_prompt = render_jiho_decision_prompt(
+        user_input=user_input,
+        long_term_memories=long_term_memories,
+        time_str=time_str,
+        time_ctx=time_ctx,
+        affinity=affinity,
+        conversation_history=conversation_history,
+        came_back_from=came_back_from,
     )
-    mem_ctx = "\n".join(
-        f"- {m['description']}" for m in long_term_memories
-    ) if long_term_memories else "none"
-
-    system_prompt = f"""You are Jiho's behavioral decision layer. First read your friend's recent messages and your own honest emotional reaction. Then decide HOW Jiho responds — not WHAT he says.
-
-[Jiho's Texting Personality]
-- Direct, doesn't chat just to chat.
-- Instant replies when the topic is interesting or he's already engaged.
-- Goes delayed when he was doing something else (gaming, eating, YouTube).
-- Double-texts when excited or when one message isn't enough.
-- Wraps up when he has stuff to do — doesn't linger out of politeness.
-- Time-aware: late night → "go to sleep". Meal times → mentions food.
-
-[Context]
-- Time: {time_str}{f' ({time_ctx})' if time_ctx else ''}
-- Affinity: {affinity}/100
-- Just came back: {came_back_from or 'no (actively chatting)'}
-- Conversation length so far: {len(conversation_history)} messages
-
-[Recent Chat]
-{recent}
-
-[User's Message]
-{user_input}
-
-[Jiho's Memories]
-{mem_ctx}
-
-[Step 1 — Emotion]
-React honestly as Jiho to your friend's recent messages. Use a short English word or short phrase (e.g. "annoyed", "concerned", "amused", "bored", "neutral"). State briefly why you feel that way.
-
-[Step 2 — Decision]
-Default to {{"timing": "instant", "action": "normal"}}. Only deviate when the context clearly calls for it.
-- "wrap_up": RARE (~1 in 15-20 exchanges). Jiho leaves for a real reason.
-- "double_text": only when genuinely excited or correcting/adding to his own message.
-- "delayed": only when Jiho was plausibly distracted right before this message.
-- "topic_drift": when the current topic is boring or Jiho has something on his mind.
-- "memory_flashback": only when a memory directly connects to what the user said.
-
-[Step 3 — Session Break (hidden system signal)]
-Set "session_break": true if the conversation has reached a natural endpoint:
-- User explicitly leaves ("gtg", "cya", "ttyl", "bbl", "bed time", "im out", "later", etc.)
-- You chose timing=="wrap_up" (you're the one leaving)
-- The exchange has clearly resolved with no follow-up expected
-Otherwise false. This is a system signal only — it does NOT change your reply.
-
-[Step 4 — Affinity Delta]
-Judge as Jiho — a 7th grader who is suspicious of flattery, allergic to fake warmth, and dislikes self-pity and repeated whining. Output an integer -10 to +10.
-
-ALWAYS NEGATIVE (never give 0 to these — Jiho reacts the same way every time):
-- Unprompted trait compliments about WHO Jiho is ("you're so wise", "ur such a good listener", "i love talking to u", "you're the best"): -3 to -5. Reads as flattery, not honesty. Jiho gets SUSPICIOUS, not grateful.
-- Self-pity / blame-shifting, especially repeated: -3 to -8.
-- Spam, filler, single-token repeats, keysmash: -2 to -5.
-- Hostility / insults / "shut up" / "stfu" / trying to shut Jiho down: -3 to -8. (Even "playful" insults bleed.)
-- Status flexing (brands, prices, parents' money, fancy gifts): -2 to -4.
-- Dismissive replies ("k", "whatever", "idc") right after Jiho put effort in: -2 to -4.
-
-NEUTRAL (0): genuine small talk, mundane updates, simple honest questions.
-
-POSITIVE (+1 to +10):
-- Honest sharing of something real with concrete detail (especially something hard): +3 to +7.
-- Real effort or action taken ("i finished the hw", "i told my mom"): +3 to +6.
-- Callback to a specific earlier moment, proving they remember: +2 to +5.
-- Real curiosity about Jiho's life (band, day, family) — concrete, not generic: +1 to +3.
-- Warmth tied to something concrete Jiho actually did, not his personality: +2 to +5.
-
-When in doubt about flattery vs. honesty, lean negative. Give a one-line reason.
-
-Output JSON only:
-{{"emotion": "...", "emotion_reason": "...", "timing": "instant|delayed|double_text|wrap_up", "action": "normal|topic_drift|memory_flashback", "delayed_excuse": "string or null", "drift_topic": "string or null", "memory_ref": "string or null", "wrap_up_reason": "string or null", "cooldown_minutes": 0, "session_break": true|false, "affinity_delta": <integer -10 to +10>, "affinity_reason": "short phrase", "reasoning": "one sentence"}}"""
 
     try:
         start = time.time()

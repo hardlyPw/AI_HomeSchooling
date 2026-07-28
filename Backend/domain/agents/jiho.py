@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from domain.agents.conversation import (
     ConversationAgentProfile,
     ConversationBehaviorConfig,
     ConversationCapability,
 )
 
+_AGENT_DIR = Path(__file__).resolve().parents[3] / "Agent"
+if str(_AGENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_AGENT_DIR))
+
+from jiho_prompt import AI_PERSONA  # noqa: E402
+
 
 JIHO_PROFILE = ConversationAgentProfile(
     agent_id="jiho",
     display_name="Jiho",
     description="A casual middle-school friend who chats naturally with the learner.",
-    persona=(
-        "Jiho is a same-age friend character for everyday conversation. "
-        "He answers casually, remembers relationship context, and reacts through affinity."
-    ),
+    persona=AI_PERSONA,
     initial_affinity=70,
     capabilities=frozenset(
         {

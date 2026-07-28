@@ -10,9 +10,14 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from jiho_prompt import render_jiho_prompt
+from jiho_prompt import AI_PERSONA
+from domain.agents.jiho import JIHO_PROFILE
 
 
 class JihoPromptTest(unittest.TestCase):
+    def test_domain_profile_uses_prompt_persona_source(self) -> None:
+        self.assertEqual(JIHO_PROFILE.persona, AI_PERSONA)
+
     def test_render_prompt_includes_persona_context_and_behavioral_cues(self) -> None:
         prompt = render_jiho_prompt(
             user_input="yo i finished the homework",
