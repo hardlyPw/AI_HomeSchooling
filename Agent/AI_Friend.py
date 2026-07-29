@@ -6,12 +6,12 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 
-import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from openai import OpenAI
-from concurrent.futures import ThreadPoolExecutor
 import time
+from ai_friend_eval import EXPORT_FILE, export_to_jsonl as export_turn_to_jsonl
+from ai_friend_eval import update_affinity as evaluate_affinity_delta
 from jiho_decision_prompt import render_jiho_decision_prompt
 from jiho_memory_repository import JihoMemoryRepository
 from jiho_prompt import ROLE_DISPLAY, render_jiho_prompt
@@ -249,51 +249,16 @@ def make_decision(
 
 # ── 호감도 갱신 ───────────────────────────────────────────────────────
 def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) -> tuple[int, str]:
-    """대화 후 호감도 변화량(delta)과 이유를 반환"""
-    global affinity
-    recent_str = "\n".join(
-        f"{ROLE_DISPLAY.get(m['role'], m['role'])}: {m['text']}"
-        for m in conversation_history[-6:]
+    """CLI/scenario-only legacy wrapper for affinity evaluation."""
+    return evaluate_affinity_delta(
+        openai_client=openai_client,
+        role_display=ROLE_DISPLAY,
+        conversation_history=conversation_history,
+        current_affinity=affinity,
+        agent_emotion_info=agent_emotion_info,
+        user_input=user_input,
+        ai_reply=ai_reply,
     )
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": (
-                "You are Jiho, a 7th-grade middle schooler. Direct, dry, peer-tone — NOT a counselor or therapist.\n"
-                "You dislike fakeness, self-pity, repeated whining, status-symbol bragging, and unprompted flattery.\n"
-                "Judge how much your affinity toward the other person changed after this exchange.\n"
-                f"Current affinity: {affinity}/100\n"
-                f"Your current emotion: {agent_emotion_info.get('emotion', '')} — {agent_emotion_info.get('reason', '')}\n"
-                "\n"
-                "CRITICAL — these Jiho replies are PERSONA VIOLATIONS, not good moves.\n"
-                "If Jiho's reply contains ANY of them, delta must be NEGATIVE.\n"
-                "A peer-tone direct reply is rewarded; an over-warm / parental / cheerleader reply is punished.\n"
-                "  - Excited engagement with status symbols: 'that's wild', 'that's sick', 'camera any good?', asking specs/price about new phones/brands\n"
-                "  - Parental tone: 'get some rest', 'go study', 'be careful'\n"
-                "  - Cheerleader tone on positive news: 'congrats!!', 'so proud of you', 'what's next for you?'\n"
-                "  - Forbidden slang in Jiho's reply: 'ngl', 'fr fr', 'bussin', 'no cap', 'deadass', 'bet', 'on god', 'finna', 'based', 'hits different'\n"
-                "  - Accepting / thanking for unprompted trait compliments\n"
-                "\n"
-                "Output the affinity delta as an integer between -10 and +10, with a brief reason, in JSON.\n"
-                'Output format (JSON only): {{"delta": N, "reason": "..."}}'
-            )},
-            {"role": "user", "content": (
-                f"[Recent Chat]\n{recent_str}\n\n"
-                f"[Latest Exchange]\nUser: {user_input}\nJiho: {ai_reply}"
-            )},
-        ],
-        max_tokens=100,
-        temperature=0,
-        response_format={"type": "json_object"},
-    )
-    raw = (response.choices[0].message.content or "").strip()
-    try:
-        parsed = json.loads(raw)
-        delta = max(-10, min(10, int(parsed.get("delta", 0))))
-        reason = str(parsed.get("reason", ""))
-        return delta, reason
-    except Exception:
-        return 0, ""
 
 # ── 대화 히스토리 추가 ────────────────────────────────────────────────
 def add_to_history(role: str, text: str) -> None:
@@ -408,37 +373,7 @@ def _split_double_text(text: str) -> list[str]:
 
     return [text]
 
-# ── Raw Conversation Log (general AI 비교용) ────────────────────────
-CONVERSATION_LOG_DIR = "conversations"
-_conversation_log_path: str | None = None
-
-
-def _init_conversation_log() -> None:
-    """세션 시작 시 timestamp 기반 로그 파일 생성 + 헤더 기록."""
-    global _conversation_log_path
-    os.makedirs(CONVERSATION_LOG_DIR, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    _conversation_log_path = os.path.join(CONVERSATION_LOG_DIR, f"jiho_chat_{stamp}.txt")
-    with open(_conversation_log_path, "w", encoding="utf-8") as f:
-        f.write("=== Jiho Conversation Log ===\n")
-        f.write(f"Session start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Initial affinity: {affinity}\n\n")
-    print(f"[Log] 대화 기록: {_conversation_log_path}")
-
-
-def _log_turn(role: str, text: str) -> None:
-    """한 turn을 raw text 로그에 append. role: 'user' or 'ai'."""
-    if _conversation_log_path is None:
-        return
-    label = "User" if role == "user" else "Jiho"
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    with open(_conversation_log_path, "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {label}: {text}\n")
-
-
 # ── JSONL Export for Autorater ──────────────────────────────────────
-EXPORT_FILE = "autorater_target.jsonl"
-
 def export_to_jsonl(
     user_input: str,
     ai_reply: str,
@@ -446,150 +381,18 @@ def export_to_jsonl(
     consecutive_neg: int,
     agent_emotion_info: dict | None = None,
 ) -> None:
-    """Append one turn to autorater_target.jsonl in the Learning_Friend_Autorater format.
-
-    affinity_at_response = the affinity score in effect WHEN the AI generated the reply
-    (i.e. the pre-update value), so the judge sees the score the response was conditioned on.
-    """
-    timestamp_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-    emotion_str = ""
-    if agent_emotion_info:
-        emotion_str = f", agent_emotion={agent_emotion_info.get('emotion', '')}"
-    record = {
-        "id": f"ai_friend_{timestamp_id}",
-        "input": user_input,
-        "context": f"affinity={affinity_at_response}, consecutive_negative={consecutive_neg}{emotion_str}",
-        "messages": [
-            {"role": "user", "content": user_input},
-            {"role": "assistant", "content": ai_reply},
-        ],
-    }
-    with open(EXPORT_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    """CLI/scenario-only legacy wrapper for autorater export."""
+    export_turn_to_jsonl(
+        user_input=user_input,
+        ai_reply=ai_reply,
+        affinity_at_response=affinity_at_response,
+        consecutive_neg=consecutive_neg,
+        agent_emotion_info=agent_emotion_info,
+        export_file=EXPORT_FILE,
+    )
 
 # ── 실행 ────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    mode_label = "ON (풀 시스템)" if USE_LONG_TERM_MEMORY else "OFF (페르소나 단독 평가 모드)"
-    print(f"\n[모드] 장기기억 RAG: {mode_label}")
-    # INITIAL_HISTORY를 단기기억에 시드로 로드 (자연스러운 follow-up용)
-    conversation_history.extend(INITIAL_HISTORY)
-    print(f"[Seed] 단기기억 {len(INITIAL_HISTORY)}개 로드됨")
-    _init_conversation_log()
-    print("대화를 시작합니다. 종료하려면 'exit' 입력\n")
-    while True:
-        user_input = input("유저: ").strip()
-        if user_input.lower() == "exit":
-            break
-        if not user_input:
-            continue
+    from ai_friend_cli import main
 
-        time.sleep(random.uniform(0.5, 1.0))
-        print("AI: ...", flush=True)
-
-        start_total = time.time()
-
-        # 호감도에 따라 장기기억 개수 조정
-        top_k = 1 if affinity <= 40 else 5
-
-        if USE_LONG_TERM_MEMORY:
-            long_term = get_long_term_memory(user_input, top_k)
-        else:
-            long_term = []
-
-        # 시간대 한 번만 flag되도록 turn 시작 시 한 번 계산해서 양쪽에 동일하게 주입
-        time_str_turn, time_ctx_turn = _consume_time_context_for_turn()
-        if time_ctx_turn is None:
-            print(f"[Time] {time_str_turn} (bucket 재언급 suppress)")
-        else:
-            print(f"[Time] {time_str_turn} ({time_ctx_turn})")
-
-        # ── 1st call: 감정 + 행동 결정 (한 번에) ─────────────────
-        decision = make_decision(user_input, long_term, time_str_turn, time_ctx_turn)
-        agent_emotion_info = {
-            "emotion": decision.get("emotion", "neutral"),
-            "reason":  decision.get("emotion_reason", ""),
-        }
-        print(f"[Agent 감정] {agent_emotion_info['emotion']} — {agent_emotion_info['reason']}")
-
-        # ── 2nd call: 답변 생성 ──────────────────────────────────
-        prompt = build_prompt(
-            user_input,
-            agent_emotion_info=agent_emotion_info,
-            long_term_memories=long_term,
-            decision=decision,
-            time_str=time_str_turn,
-            time_ctx=time_ctx_turn,
-        )
-        ai_raw = generate_ai_response(prompt)
-
-        if decision.get("timing") == "double_text":
-            ai_replies = _split_double_text(ai_raw)
-        else:
-            ai_replies = [ai_raw]
-
-        ai_reply_joined = " ".join(ai_replies)
-
-        # 히스토리 저장 + raw 로그
-        add_to_history("user", user_input)
-        _log_turn("user", user_input)
-        for msg in ai_replies:
-            add_to_history("ai", msg)
-            _log_turn("ai", msg)
-
-        # 호감도 업데이트
-        with ThreadPoolExecutor() as executor:
-            future_affinity = executor.submit(
-                update_affinity, agent_emotion_info, user_input, ai_reply_joined
-            )
-            delta, affinity_reason = future_affinity.result()
-
-        # 장기기억 트리거
-        record_turn(user_input, ai_reply_joined, session_break=decision.get("session_break", False))
-
-        # 연속 마이너스 3회부터 ×2 적용
-        if delta < 0:
-            consecutive_negative += 1
-            if consecutive_negative >= 3:
-                actual_delta = delta * 2
-            else:
-                actual_delta = delta
-        else:
-            consecutive_negative = 0
-            actual_delta = delta
-
-        old_affinity = affinity
-        affinity = max(0, min(100, affinity + actual_delta))
-
-        # JSONL export
-        export_to_jsonl(
-            user_input=user_input,
-            ai_reply=ai_reply_joined,
-            affinity_at_response=old_affinity,
-            consecutive_neg=consecutive_negative,
-            agent_emotion_info=agent_emotion_info,
-        )
-
-        # ── 출력 ─────────────────────────────────────────────────
-        for i, msg in enumerate(ai_replies):
-            if i > 0:
-                time.sleep(random.uniform(0.3, 0.8))
-            print(f"\nJiho: {msg}")
-
-        # ── 쿨다운 처리 (wrap_up) ────────────────────────────────
-        if decision.get("timing") == "wrap_up":
-            cd_min = max(15, min(120, int(decision.get("cooldown_minutes") or 30)))
-            _cooldown_until = datetime.now() + timedelta(minutes=cd_min)
-            _cooldown_reason = decision.get("wrap_up_reason") or "had to go"
-            _last_response_time = datetime.now()
-            print(f"[Cooldown] Jiho 자리비움 ~{cd_min}분 ({_cooldown_reason})")
-        else:
-            _last_response_time = datetime.now()
-
-        multiplier_note = " (×2)" if delta < 0 and consecutive_negative >= 3 else ""
-        timing_tag = decision.get("timing", "instant")
-        action_tag = decision.get("action", "normal")
-        print(f"[호감도] {old_affinity} → {affinity} ({delta:+d}{multiplier_note}) | {affinity_reason}")
-        break_tag = decision.get("session_break", False)
-        print(f"[행동] timing={timing_tag}, action={action_tag}, session_break={break_tag}")
-        print(f"[Export] → {EXPORT_FILE}")
-        print(f"[총 레이턴시: {time.time() - start_total:.4f}초]\n")
+    main(sys.modules[__name__])
