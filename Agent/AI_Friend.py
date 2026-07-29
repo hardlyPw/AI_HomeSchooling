@@ -12,10 +12,11 @@ from ai_friend_decision import make_decision as make_jiho_decision
 from ai_friend_eval import EXPORT_FILE, export_to_jsonl as export_turn_to_jsonl
 from ai_friend_eval import update_affinity as evaluate_affinity_delta
 from jiho_memory_repository import JihoMemoryRepository
+from ai_friend_prompt_builder import build_runtime_prompt
 from ai_friend_response import generate_response as generate_jiho_response
 from ai_friend_response import split_double_text
 from ai_friend_time import TimeContextTracker
-from jiho_prompt import ROLE_DISPLAY, render_jiho_prompt
+from jiho_prompt import ROLE_DISPLAY
 
 # Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
 try:
@@ -191,60 +192,20 @@ def build_prompt(
     time_str: str | None = None,
     time_ctx: str | None = None,
 ) -> str:
-    # 외부에서 미리 조회된 장기기억이 없으면 직접 조회 (하위 호환)
-    long_term = long_term_memories if long_term_memories is not None else get_long_term_memory(user_input, top_k=long_term_k)
-
-    if DEBUG_PROMPT:
-        SEP = "─" * 60
-        print(f"\n{'━'*60}")
-        print("[DEBUG] 프롬프트 조립 과정")
-        print(f"{'━'*60}")
-        print(f"[1] 유저 입력:\n  {user_input}")
-        if agent_emotion_info:
-            print(SEP)
-            print(f"[1-1] Agent 감정 분석: {agent_emotion_info}")
-        print(SEP)
-        print(f"[2] 장기기억 검색 결과 (top {long_term_k}):")
-        if long_term:
-            for i, m in enumerate(long_term, 1):
-                print(f"  [{i}] (score={m['score']}) {m['description'][:80]}{'...' if len(m['description']) > 80 else ''}")
-        else:
-            print("  (없음)")
-        print(SEP)
-        print(f"[3] 단기기억 (최근 대화 {len(conversation_history)}개):")
-        if conversation_history:
-            for m in conversation_history[-6:]:  # 마지막 6개만 미리보기
-                label = ROLE_DISPLAY.get(m['role'], m['role'])
-                print(f"  {label}: {m['text'][:60]}{'...' if len(m['text']) > 60 else ''}")
-            if len(conversation_history) > 6:
-                print(f"  ... (상위 {len(conversation_history) - 6}개 생략)")
-        else:
-            print("  (없음)")
-        print(SEP)
-
-    # 시그니처를 추가하기 전 호출하는 코드와의 하위호환을 위해 fallback 처리.
-    # 정상 경로는 main 루프에서 _consume_time_context_for_turn() 결과를 넘겨준다.
-    if time_str is None:
-        time_str, time_ctx = _get_time_context()
-
-    prompt = render_jiho_prompt(
+    return build_runtime_prompt(
         user_input=user_input,
         affinity=affinity,
-        long_term_memories=long_term,
-        long_term_k=long_term_k,
         conversation_history=conversation_history,
+        memory_loader=get_long_term_memory,
+        time_context_loader=_get_time_context,
         agent_emotion_info=agent_emotion_info,
+        long_term_memories=long_term_memories,
+        long_term_k=long_term_k,
         decision=decision,
         time_str=time_str,
         time_ctx=time_ctx,
+        debug_prompt=DEBUG_PROMPT,
     )
-
-    if DEBUG_PROMPT:
-        print(f"[4] 최종 프롬프트 (총 {len(prompt)}자):")
-        print(prompt)
-        print("━" * 60)
-
-    return prompt
 
 # ── GPT 답변 생성 (2nd API call) ──────────────────────────────────────
 last_response_usage: dict | None = None

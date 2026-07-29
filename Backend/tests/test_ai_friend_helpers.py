@@ -13,6 +13,7 @@ if str(AGENT_ROOT) not in sys.path:
 
 from ai_friend_decision import make_decision
 from ai_friend_decision import normalize_decision
+from ai_friend_prompt_builder import build_runtime_prompt
 from ai_friend_response import generate_response
 from ai_friend_response import split_double_text
 from ai_friend_time import TimeContextTracker
@@ -97,6 +98,23 @@ class AIFriendHelpersTest(unittest.TestCase):
     def test_split_double_text_caps_at_two_messages(self) -> None:
         self.assertEqual(split_double_text("one. two. three."), ["one", "two. three"])
         self.assertEqual(split_double_text("one two three four"), ["one two", "three four"])
+
+    def test_build_runtime_prompt_uses_supplied_memory_without_loader(self) -> None:
+        def fail_memory_loader(user_input: str, top_k: int) -> list[dict]:
+            raise AssertionError("memory loader should not be called")
+
+        prompt = build_runtime_prompt(
+            user_input="i finished math",
+            affinity=70,
+            conversation_history=[{"role": "user", "text": "math was hard"}],
+            memory_loader=fail_memory_loader,
+            time_context_loader=lambda: ("10:00 PM", "late for a 7th grader"),
+            long_term_memories=[{"description": "User struggles with equations."}],
+            debug_prompt=False,
+        )
+
+        self.assertIn("User struggles with equations.", prompt)
+        self.assertIn("User: math was hard", prompt)
 
 
 if __name__ == "__main__":
