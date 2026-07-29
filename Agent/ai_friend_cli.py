@@ -21,7 +21,7 @@ def _init_conversation_log(af: ModuleType) -> None:
     with open(_conversation_log_path, "w", encoding="utf-8") as file:
         file.write("=== Jiho Conversation Log ===\n")
         file.write(f"Session start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        file.write(f"Initial affinity: {af.affinity}\n\n")
+        file.write(f"Initial affinity: {af.runtime_state.affinity}\n\n")
     print(f"[Log] 대화 기록: {_conversation_log_path}")
 
 
@@ -42,7 +42,7 @@ def main(af_module: ModuleType | None = None) -> None:
 
     mode_label = "ON (풀 시스템)" if af.USE_LONG_TERM_MEMORY else "OFF (페르소나 단독 평가 모드)"
     print(f"\n[모드] 장기기억 RAG: {mode_label}")
-    af.conversation_history.extend(af.INITIAL_HISTORY)
+    af.runtime_state.conversation_history.extend(af.INITIAL_HISTORY)
     print(f"[Seed] 단기기억 {len(af.INITIAL_HISTORY)}개 로드됨")
     _init_conversation_log(af)
     print("대화를 시작합니다. 종료하려면 'exit' 입력\n")
@@ -57,7 +57,7 @@ def main(af_module: ModuleType | None = None) -> None:
         print("AI: ...", flush=True)
 
         start_total = time.time()
-        top_k = 1 if af.affinity <= 40 else 5
+        top_k = 1 if af.runtime_state.affinity <= 40 else 5
 
         if af.USE_LONG_TERM_MEMORY:
             long_term = af.get_long_term_memory(user_input, top_k)
@@ -110,23 +110,23 @@ def main(af_module: ModuleType | None = None) -> None:
         af.record_turn(user_input, ai_reply_joined, session_break=decision.get("session_break", False))
 
         if delta < 0:
-            af.consecutive_negative += 1
-            if af.consecutive_negative >= 3:
+            af.runtime_state.consecutive_negative += 1
+            if af.runtime_state.consecutive_negative >= 3:
                 actual_delta = delta * 2
             else:
                 actual_delta = delta
         else:
-            af.consecutive_negative = 0
+            af.runtime_state.consecutive_negative = 0
             actual_delta = delta
 
-        old_affinity = af.affinity
-        af.affinity = max(0, min(100, af.affinity + actual_delta))
+        old_affinity = af.runtime_state.affinity
+        af.runtime_state.affinity = max(0, min(100, af.runtime_state.affinity + actual_delta))
 
         af.export_to_jsonl(
             user_input=user_input,
             ai_reply=ai_reply_joined,
             affinity_at_response=old_affinity,
-            consecutive_neg=af.consecutive_negative,
+            consecutive_neg=af.runtime_state.consecutive_negative,
             agent_emotion_info=agent_emotion_info,
         )
 
@@ -137,17 +137,17 @@ def main(af_module: ModuleType | None = None) -> None:
 
         if decision.get("timing") == "wrap_up":
             cooldown_minutes = max(15, min(120, int(decision.get("cooldown_minutes") or 30)))
-            af._cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
-            af._cooldown_reason = decision.get("wrap_up_reason") or "had to go"
-            af._last_response_time = datetime.now()
-            print(f"[Cooldown] Jiho 자리비움 ~{cooldown_minutes}분 ({af._cooldown_reason})")
+            af.runtime_state.cooldown_until = datetime.now() + timedelta(minutes=cooldown_minutes)
+            af.runtime_state.cooldown_reason = decision.get("wrap_up_reason") or "had to go"
+            af.runtime_state.last_response_time = datetime.now()
+            print(f"[Cooldown] Jiho 자리비움 ~{cooldown_minutes}분 ({af.runtime_state.cooldown_reason})")
         else:
-            af._last_response_time = datetime.now()
+            af.runtime_state.last_response_time = datetime.now()
 
-        multiplier_note = " (×2)" if delta < 0 and af.consecutive_negative >= 3 else ""
+        multiplier_note = " (×2)" if delta < 0 and af.runtime_state.consecutive_negative >= 3 else ""
         timing_tag = decision.get("timing", "instant")
         action_tag = decision.get("action", "normal")
-        print(f"[호감도] {old_affinity} → {af.affinity} ({delta:+d}{multiplier_note}) | {affinity_reason}")
+        print(f"[호감도] {old_affinity} → {af.runtime_state.affinity} ({delta:+d}{multiplier_note}) | {affinity_reason}")
         break_tag = decision.get("session_break", False)
         print(f"[행동] timing={timing_tag}, action={action_tag}, session_break={break_tag}")
         print(f"[Export] → {af.EXPORT_FILE}")

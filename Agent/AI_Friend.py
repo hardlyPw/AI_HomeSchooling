@@ -5,8 +5,6 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 
-from datetime import datetime
-
 from openai import OpenAI
 from ai_friend_decision import make_decision as make_jiho_decision
 from ai_friend_eval import EXPORT_FILE, export_to_jsonl as export_turn_to_jsonl
@@ -15,7 +13,7 @@ from jiho_memory_repository import JihoMemoryRepository
 from ai_friend_prompt_builder import build_runtime_prompt
 from ai_friend_response import generate_response as generate_jiho_response
 from ai_friend_response import split_double_text
-from ai_friend_time import TimeContextTracker
+from ai_friend_state import JihoRuntimeState
 from jiho_prompt import ROLE_DISPLAY
 
 # Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
@@ -68,14 +66,7 @@ _memory_repository = JihoMemoryRepository(
     uses_long_term_memory=lambda: USE_LONG_TERM_MEMORY,
 )
 
-affinity: int = 70             # 호감도 (0~100)
-consecutive_negative: int = 0  # 연속 마이너스 횟수
-
-# ── 쿨다운 / 행동 레이어 상태 ──────────────────────────────────────
-_cooldown_until: datetime | None = None
-_cooldown_reason: str = ""
-_last_response_time: datetime = datetime.now()
-_time_context_tracker = TimeContextTracker()
+runtime_state = JihoRuntimeState()
 
 # 프로세스 종료 시 pending 세션 자동 마무리 (KeyboardInterrupt 포함)
 atexit.register(lambda: memory_shutdown())
@@ -105,8 +96,6 @@ INITIAL_HISTORY: list[dict] = [
     {"role": "ai",   "text": "k dont be late this time"},
 ]
 
-conversation_history: list[dict] = []
-
 # ── 장기기억: repository wrapper ───────────────────────────────────
 def get_long_term_memory(query_text: str, top_k: int = 5) -> list[dict]:
     return _memory_repository.get_long_term_memory(query_text, top_k=top_k)
@@ -126,11 +115,11 @@ def memory_shutdown() -> None:
 
 # ── 행동 결정 레이어 (1st API call) ─────────────────────────────────
 def _get_time_context() -> tuple[str, str]:
-    return _time_context_tracker.get_time_context()
+    return runtime_state.time_context_tracker.get_time_context()
 
 
 def _consume_time_context_for_turn() -> tuple[str, str | None]:
-    return _time_context_tracker.consume_for_turn()
+    return runtime_state.time_context_tracker.consume_for_turn()
 
 
 def make_decision(
@@ -145,22 +134,20 @@ def make_decision(
     so we hide the bucket label from the decision layer — that way it stops
     picking wrap_up / drift-to-sleep based on the same late-night cue.
     """
-    global _cooldown_until, _cooldown_reason
-
     result = make_jiho_decision(
         openai_client=openai_client,
         user_input=user_input,
         long_term_memories=long_term_memories,
         time_str=time_str,
         time_ctx=time_ctx,
-        affinity=affinity,
-        conversation_history=conversation_history,
-        cooldown_until=_cooldown_until,
-        cooldown_reason=_cooldown_reason,
-        last_response_time=_last_response_time,
+        affinity=runtime_state.affinity,
+        conversation_history=runtime_state.conversation_history,
+        cooldown_until=runtime_state.cooldown_until,
+        cooldown_reason=runtime_state.cooldown_reason,
+        last_response_time=runtime_state.last_response_time,
     )
-    _cooldown_until = result.cooldown_until
-    _cooldown_reason = result.cooldown_reason
+    runtime_state.cooldown_until = result.cooldown_until
+    runtime_state.cooldown_reason = result.cooldown_reason
     return result.decision
 
 
@@ -170,8 +157,8 @@ def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) ->
     return evaluate_affinity_delta(
         openai_client=openai_client,
         role_display=ROLE_DISPLAY,
-        conversation_history=conversation_history,
-        current_affinity=affinity,
+        conversation_history=runtime_state.conversation_history,
+        current_affinity=runtime_state.affinity,
         agent_emotion_info=agent_emotion_info,
         user_input=user_input,
         ai_reply=ai_reply,
@@ -179,7 +166,7 @@ def update_affinity(agent_emotion_info: dict, user_input: str, ai_reply: str) ->
 
 # ── 대화 히스토리 추가 ────────────────────────────────────────────────
 def add_to_history(role: str, text: str) -> None:
-    conversation_history.append({"role": role, "text": text})
+    runtime_state.add_message(role, text)
     # 장기기억 트리거는 main 루프의 record_turn(user, ai)에서 처리
 
 # ── 프롬프트 조립 ────────────────────────────────────────────────────
@@ -194,8 +181,8 @@ def build_prompt(
 ) -> str:
     return build_runtime_prompt(
         user_input=user_input,
-        affinity=affinity,
-        conversation_history=conversation_history,
+        affinity=runtime_state.affinity,
+        conversation_history=runtime_state.conversation_history,
         memory_loader=get_long_term_memory,
         time_context_loader=_get_time_context,
         agent_emotion_info=agent_emotion_info,
@@ -208,14 +195,10 @@ def build_prompt(
     )
 
 # ── GPT 답변 생성 (2nd API call) ──────────────────────────────────────
-last_response_usage: dict | None = None
-
-
 def generate_ai_response(prompt_text: str) -> str:
     """2nd call: 단일 답변 텍스트 반환. 연톡 분리는 _split_double_text()에서 처리."""
-    global last_response_usage
     text, usage = generate_jiho_response(openai_client, prompt_text)
-    last_response_usage = usage
+    runtime_state.last_response_usage = usage
     return text
 
 

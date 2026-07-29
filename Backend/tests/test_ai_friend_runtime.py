@@ -10,6 +10,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
+from infrastructure.adapters.ai_friend_state import AIFriendStateAdapter
 
 
 class FakeSupabase:
@@ -109,6 +110,29 @@ class AIFriendRuntimeTest(unittest.TestCase):
 
         runtime.record_turn("u", "a", True)
         self.assertEqual(module.recorded_turn, ("u", "a", True))
+
+    def test_state_adapter_prefers_runtime_state_when_present(self) -> None:
+        module = fake_module()
+        module.runtime_state = SimpleNamespace(
+            affinity=80,
+            consecutive_negative=1,
+            conversation_history=[{"role": "user", "text": "old"}],
+            reset=lambda initial_affinity: None,
+            last_response_usage={"prompt_tokens": 9, "completion_tokens": 1},
+        )
+        adapter = AIFriendStateAdapter(module)
+
+        self.assertEqual(adapter.affinity, 80)
+        adapter.affinity = 65
+        adapter.consecutive_negative = 3
+        adapter.append_turn("u", "a")
+
+        self.assertEqual(module.runtime_state.affinity, 65)
+        self.assertEqual(module.runtime_state.consecutive_negative, 3)
+        self.assertEqual(
+            module.runtime_state.conversation_history[-2:],
+            [{"role": "user", "text": "u"}, {"role": "ai", "text": "a"}],
+        )
 
 
 if __name__ == "__main__":

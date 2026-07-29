@@ -100,12 +100,16 @@ def _reset_runtime_state(af: Any) -> None:
         except Exception:
             pass
         af._session_timer = None
-    af.conversation_history.clear()
-    af.conversation_history.extend(af.INITIAL_HISTORY)
-    af.affinity = 70
-    af.consecutive_negative = 0
-    if hasattr(af, "_session_time_buckets_seen"):
-        af._session_time_buckets_seen.clear()
+    if hasattr(af, "runtime_state"):
+        af.runtime_state.reset(70)
+        af.runtime_state.conversation_history.extend(af.INITIAL_HISTORY)
+    else:
+        af.conversation_history.clear()
+        af.conversation_history.extend(af.INITIAL_HISTORY)
+        af.affinity = 70
+        af.consecutive_negative = 0
+        if hasattr(af, "_session_time_buckets_seen"):
+            af._session_time_buckets_seen.clear()
 
 
 def _reset_db_to_demo_seed(af: Any) -> None:
@@ -122,7 +126,8 @@ def _run_turn(
     record_memory: bool,
     export_jsonl: bool,
 ) -> dict[str, Any]:
-    top_k = 1 if af.affinity <= 40 else 5
+    state = getattr(af, "runtime_state", af)
+    top_k = 1 if state.affinity <= 40 else 5
     long_term = af.get_long_term_memory(user_input, top_k) if af.USE_LONG_TERM_MEMORY else []
     time_str, time_ctx = af._consume_time_context_for_turn()
 
@@ -159,21 +164,21 @@ def _run_turn(
         af.record_turn(user_input, ai_reply_joined, session_break=decision.get("session_break", False))
 
     if delta < 0:
-        af.consecutive_negative += 1
-        actual_delta = delta * 2 if af.consecutive_negative >= 3 else delta
+        state.consecutive_negative += 1
+        actual_delta = delta * 2 if state.consecutive_negative >= 3 else delta
     else:
-        af.consecutive_negative = 0
+        state.consecutive_negative = 0
         actual_delta = delta
 
-    old_affinity = af.affinity
-    af.affinity = max(0, min(100, af.affinity + actual_delta))
+    old_affinity = state.affinity
+    state.affinity = max(0, min(100, state.affinity + actual_delta))
 
     if export_jsonl:
         af.export_to_jsonl(
             user_input=user_input,
             ai_reply=ai_reply_joined,
             affinity_at_response=old_affinity,
-            consecutive_neg=af.consecutive_negative,
+            consecutive_neg=state.consecutive_negative,
             agent_emotion_info=agent_emotion_info,
         )
 
@@ -187,7 +192,7 @@ def _run_turn(
         "ai_raw": ai_raw,
         "ai_replies": ai_replies,
         "affinity_before": old_affinity,
-        "affinity_after": af.affinity,
+        "affinity_after": state.affinity,
         "affinity_delta": delta,
         "affinity_actual_delta": actual_delta,
         "affinity_reason": affinity_reason,
@@ -286,7 +291,7 @@ def main() -> None:
             {
                 "scenario": scenario.key,
                 "title": scenario.title,
-                "final_affinity": af.affinity,
+                "final_affinity": getattr(af, "runtime_state", af).affinity,
                 "turns": scenario_results,
             }
         )

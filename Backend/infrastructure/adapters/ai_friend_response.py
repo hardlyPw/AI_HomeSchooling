@@ -12,6 +12,9 @@ class AIFriendResponseGenerator:
 
     @property
     def last_response_usage(self) -> dict | None:
+        runtime_state = getattr(self._module, "runtime_state", None)
+        if runtime_state is not None:
+            return getattr(runtime_state, "last_response_usage", None)
         return getattr(self._module, "last_response_usage", None)
 
     def generate_response(self, prompt: str) -> str:
