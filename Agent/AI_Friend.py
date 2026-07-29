@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 import atexit
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -9,11 +8,13 @@ from sentence_transformers import SentenceTransformer
 from datetime import datetime
 
 from openai import OpenAI
-import time
+from ai_friend_decision import make_decision as make_jiho_decision
 from ai_friend_eval import EXPORT_FILE, export_to_jsonl as export_turn_to_jsonl
 from ai_friend_eval import update_affinity as evaluate_affinity_delta
-from jiho_decision_prompt import render_jiho_decision_prompt
 from jiho_memory_repository import JihoMemoryRepository
+from ai_friend_response import generate_response as generate_jiho_response
+from ai_friend_response import split_double_text
+from ai_friend_time import TimeContextTracker
 from jiho_prompt import ROLE_DISPLAY, render_jiho_prompt
 
 # Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
@@ -73,6 +74,7 @@ consecutive_negative: int = 0  # 연속 마이너스 횟수
 _cooldown_until: datetime | None = None
 _cooldown_reason: str = ""
 _last_response_time: datetime = datetime.now()
+_time_context_tracker = TimeContextTracker()
 
 # 프로세스 종료 시 pending 세션 자동 마무리 (KeyboardInterrupt 포함)
 atexit.register(lambda: memory_shutdown())
@@ -123,50 +125,11 @@ def memory_shutdown() -> None:
 
 # ── 행동 결정 레이어 (1st API call) ─────────────────────────────────
 def _get_time_context() -> tuple[str, str]:
-    now = datetime.now()
-    time_str = now.strftime("%I:%M %p")
-    h = now.hour
-    if 6 <= h < 8:
-        ctx = "early morning, getting ready for school"
-    elif 8 <= h < 15:
-        ctx = "school hours"
-    elif 15 <= h < 18:
-        ctx = "after school, free time"
-    elif 18 <= h < 21:
-        ctx = "evening at home"
-    elif 21 <= h < 24:
-        ctx = "late for a 7th grader"
-    else:
-        ctx = "middle of the night"
-    return time_str, ctx
-
-
-# Buckets that trigger Jiho's "flag the time" reflex. After the first turn that
-# hits one of these in a session, we suppress the time context so Jiho stops
-# harping on it (otherwise late-night → he keeps telling the user to sleep).
-_NOTEWORTHY_TIME_CTXS = {
-    "early morning, getting ready for school",
-    "school hours",
-    "late for a 7th grader",
-    "middle of the night",
-}
-_session_time_buckets_seen: set[str] = set()
+    return _time_context_tracker.get_time_context()
 
 
 def _consume_time_context_for_turn() -> tuple[str, str | None]:
-    """Per-turn time context with session-level suppression.
-
-    Returns (time_str, time_ctx). time_ctx is None when the current bucket has
-    already been flagged this session — callers should omit the time label /
-    [Current Time] section so the late-night / school-hours reflex doesn't
-    re-fire. Mutates _session_time_buckets_seen, so call once per turn.
-    """
-    time_str, time_ctx = _get_time_context()
-    if time_ctx in _NOTEWORTHY_TIME_CTXS:
-        if time_ctx in _session_time_buckets_seen:
-            return time_str, None
-        _session_time_buckets_seen.add(time_ctx)
-    return time_str, time_ctx
+    return _time_context_tracker.consume_for_turn()
 
 
 def make_decision(
@@ -183,68 +146,21 @@ def make_decision(
     """
     global _cooldown_until, _cooldown_reason
 
-    came_back_from = None
-    if _cooldown_until is not None:
-        mins_away = max(1, int((_cooldown_until - _last_response_time).total_seconds() / 60))
-        came_back_from = f"away ~{mins_away} min ({_cooldown_reason})"
-        _cooldown_until = None
-        _cooldown_reason = ""
-
-    system_prompt = render_jiho_decision_prompt(
+    result = make_jiho_decision(
+        openai_client=openai_client,
         user_input=user_input,
         long_term_memories=long_term_memories,
         time_str=time_str,
         time_ctx=time_ctx,
         affinity=affinity,
         conversation_history=conversation_history,
-        came_back_from=came_back_from,
+        cooldown_until=_cooldown_until,
+        cooldown_reason=_cooldown_reason,
+        last_response_time=_last_response_time,
     )
-
-    try:
-        start = time.time()
-        resp = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "system", "content": system_prompt}],
-            max_tokens=200,
-            temperature=0.6,
-            response_format={"type": "json_object"},
-        )
-        raw = (resp.choices[0].message.content or "").strip()
-        decision = json.loads(raw)
-        if getattr(resp, "usage", None) is not None:
-            decision["_usage"] = {
-                "prompt_tokens": resp.usage.prompt_tokens,
-                "completion_tokens": resp.usage.completion_tokens,
-            }
-        print(f"[Decision] {time.time() - start:.2f}s → "
-              f"timing={decision.get('timing')}, action={decision.get('action')}, "
-              f"break={decision.get('session_break')}, "
-              f"aff_delta={decision.get('affinity_delta', 0)}, "
-              f"reason={decision.get('reasoning', '')}")
-    except Exception as e:
-        print(f"[Decision] 실패, 기본값: {e}")
-        decision = {"timing": "instant", "action": "normal", "session_break": False, "reasoning": "fallback"}
-
-    if decision.get("timing") not in ("instant", "delayed", "double_text", "wrap_up"):
-        decision["timing"] = "instant"
-    if decision.get("action") not in ("normal", "topic_drift", "memory_flashback"):
-        decision["action"] = "normal"
-    decision["session_break"] = bool(decision.get("session_break", False))
-    # wrap_up은 Jiho가 떠나는 거니까 자동으로 세션 종료로 간주
-    if decision["timing"] == "wrap_up":
-        decision["session_break"] = True
-
-    try:
-        decision["affinity_delta"] = max(-10, min(10, int(decision.get("affinity_delta", 0))))
-    except (TypeError, ValueError):
-        decision["affinity_delta"] = 0
-    if not isinstance(decision.get("affinity_reason"), str):
-        decision["affinity_reason"] = ""
-
-    if came_back_from:
-        decision["came_back_from"] = came_back_from
-
-    return decision
+    _cooldown_until = result.cooldown_until
+    _cooldown_reason = result.cooldown_reason
+    return result.decision
 
 
 # ── 호감도 갱신 ───────────────────────────────────────────────────────
@@ -337,41 +253,13 @@ last_response_usage: dict | None = None
 def generate_ai_response(prompt_text: str) -> str:
     """2nd call: 단일 답변 텍스트 반환. 연톡 분리는 _split_double_text()에서 처리."""
     global last_response_usage
-    print("\nGPT 답변 생성 중...")
-    start = time.time()
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": prompt_text}],
-        temperature=0.8,
-        max_tokens=300,
-    )
-    print(f"[Latency] GPT 답변: {time.time() - start:.4f}초")
-    last_response_usage = (
-        {
-            "prompt_tokens": response.usage.prompt_tokens,
-            "completion_tokens": response.usage.completion_tokens,
-        }
-        if getattr(response, "usage", None) is not None
-        else None
-    )
-    return response.choices[0].message.content or "brb, gimme a sec"
+    text, usage = generate_jiho_response(openai_client, prompt_text)
+    last_response_usage = usage
+    return text
 
 
 def _split_double_text(text: str) -> list[str]:
-    """연톡 분리: 온점 기준 → 없으면 50% 단어 경계. Always max 2 beats."""
-    parts = [p.strip() for p in text.split('.') if p.strip()]
-    if len(parts) >= 2:
-        # Cap at 2 beats: first sentence stays as beat 1, rest joined into beat 2.
-        beat1 = parts[0]
-        beat2 = ". ".join(parts[1:])
-        return [beat1, beat2]
-
-    words = text.split()
-    if len(words) >= 4:
-        mid = len(words) // 2
-        return [" ".join(words[:mid]), " ".join(words[mid:])]
-
-    return [text]
+    return split_double_text(text)
 
 # ── JSONL Export for Autorater ──────────────────────────────────────
 def export_to_jsonl(
