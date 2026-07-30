@@ -26,6 +26,31 @@ class FakeSupabase:
         return None
 
 
+class FakeTimeTracker:
+    def get_time_context(self) -> tuple[str, str]:
+        return "10:00 PM", "late for a 7th grader"
+
+    def consume_for_turn(self) -> tuple[str, str]:
+        return "10:00 PM", "late for a 7th grader"
+
+
+class FakeCompletions:
+    def __init__(self, contents: list[str]) -> None:
+        self.contents = contents
+
+    def create(self, **kwargs):
+        content = self.contents.pop(0)
+        message = SimpleNamespace(content=content)
+        choice = SimpleNamespace(message=message)
+        usage = SimpleNamespace(prompt_tokens=11, completion_tokens=7)
+        return SimpleNamespace(choices=[choice], usage=usage)
+
+
+class FakeOpenAIClient:
+    def __init__(self, contents: list[str]) -> None:
+        self.chat = SimpleNamespace(completions=FakeCompletions(contents))
+
+
 def fake_module() -> SimpleNamespace:
     module = SimpleNamespace()
     module.affinity = 70
@@ -56,6 +81,32 @@ def fake_module() -> SimpleNamespace:
         (user, reply, session_break),
     )
     module.openai_client = SimpleNamespace()
+    return module
+
+
+def fake_native_module() -> SimpleNamespace:
+    module = fake_module()
+    module.runtime_state = SimpleNamespace(
+        affinity=73,
+        consecutive_negative=0,
+        conversation_history=[{"role": "user", "text": "math was hard"}],
+        cooldown_until=None,
+        cooldown_reason="",
+        last_response_time=SimpleNamespace(),
+        last_response_usage=None,
+        time_context_tracker=FakeTimeTracker(),
+        reset=lambda initial_affinity: None,
+    )
+    module.DEBUG_PROMPT = False
+    module.openai_client = FakeOpenAIClient(
+        [
+            '{"timing": "double_text", "action": "normal", "session_break": false, "affinity_delta": 2, "affinity_reason": "steady"}',
+            "first. second.",
+        ]
+    )
+    module.get_long_term_memory = lambda query_text, top_k: [
+        {"description": f"memory for {query_text}", "score": 1.0}
+    ]
     return module
 
 
@@ -133,6 +184,29 @@ class AIFriendRuntimeTest(unittest.TestCase):
             module.runtime_state.conversation_history[-2:],
             [{"role": "user", "text": "u"}, {"role": "ai", "text": "a"}],
         )
+
+    def test_runtime_uses_extracted_helpers_when_runtime_state_is_present(self) -> None:
+        module = fake_native_module()
+        runtime = AIFriendRuntime(module)
+
+        time_str, time_ctx = runtime.consume_time_context_for_turn()
+        decision = runtime.make_decision("hi", [], time_str, time_ctx)
+        prompt = runtime.build_prompt(
+            user_input="hi",
+            long_term_memories=[{"description": "User finished homework.", "score": 1.0}],
+            long_term_k=1,
+            decision=decision,
+            agent_emotion_info={"emotion": "neutral", "reason": ""},
+            time_str=time_str,
+            time_ctx=time_ctx,
+        )
+        response = runtime.generate_response(prompt)
+
+        self.assertEqual(decision["timing"], "double_text")
+        self.assertIn("User finished homework.", prompt)
+        self.assertEqual(response, "first. second.")
+        self.assertEqual(runtime.split_double_text(response), ["first", "second"])
+        self.assertEqual(runtime.last_response_usage, {"prompt_tokens": 11, "completion_tokens": 7})
 
 
 if __name__ == "__main__":
