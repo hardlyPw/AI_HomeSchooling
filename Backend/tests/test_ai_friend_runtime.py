@@ -51,6 +51,22 @@ class FakeOpenAIClient:
         self.chat = SimpleNamespace(completions=FakeCompletions(contents))
 
 
+class FakeMemoryRepository:
+    def __init__(self) -> None:
+        self.recorded_turn = None
+        self.drain_count = 0
+
+    def get_long_term_memory(self, query_text: str, top_k: int) -> list[dict]:
+        return [{"description": f"repository memory for {query_text}", "top_k": top_k}]
+
+    def record_turn(self, user: str, reply: str, session_break: bool = False) -> None:
+        self.recorded_turn = (user, reply, session_break)
+
+    def drain_pending_chunk(self) -> list[dict]:
+        self.drain_count += 1
+        return []
+
+
 def fake_module() -> SimpleNamespace:
     module = SimpleNamespace()
     module.affinity = 70
@@ -86,6 +102,7 @@ def fake_module() -> SimpleNamespace:
 
 def fake_native_module() -> SimpleNamespace:
     module = fake_module()
+    module._memory_repository = FakeMemoryRepository()
     module.runtime_state = SimpleNamespace(
         affinity=73,
         consecutive_negative=0,
@@ -189,6 +206,7 @@ class AIFriendRuntimeTest(unittest.TestCase):
         module = fake_native_module()
         runtime = AIFriendRuntime(module)
 
+        memories = runtime.get_long_term_memory("hello", 2)
         time_str, time_ctx = runtime.consume_time_context_for_turn()
         decision = runtime.make_decision("hi", [], time_str, time_ctx)
         prompt = runtime.build_prompt(
@@ -201,12 +219,29 @@ class AIFriendRuntimeTest(unittest.TestCase):
             time_ctx=time_ctx,
         )
         response = runtime.generate_response(prompt)
+        runtime.record_turn("hi", response, True)
 
+        self.assertEqual(
+            memories,
+            [{"description": "repository memory for hello", "top_k": 2}],
+        )
+        self.assertEqual(
+            module._memory_repository.recorded_turn,
+            ("hi", "first. second.", True),
+        )
         self.assertEqual(decision["timing"], "double_text")
         self.assertIn("User finished homework.", prompt)
         self.assertEqual(response, "first. second.")
         self.assertEqual(runtime.split_double_text(response), ["first", "second"])
         self.assertEqual(runtime.last_response_usage, {"prompt_tokens": 11, "completion_tokens": 7})
+
+    def test_reset_drains_pending_memory_through_native_repository(self) -> None:
+        module = fake_native_module()
+        runtime = AIFriendRuntime(module)
+
+        runtime.reset_state(initial_affinity=70)
+
+        self.assertEqual(module._memory_repository.drain_count, 1)
 
 
 if __name__ == "__main__":

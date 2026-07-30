@@ -45,6 +45,10 @@ class AIFriendStateAdapter:
         self.drain_pending_chunk()
 
     def drain_pending_chunk(self) -> None:
+        repository = getattr(self._module, "_memory_repository", None)
+        if repository is not None:
+            repository.drain_pending_chunk()
+            return
         drain_pending = getattr(self._module, "_drain_pending_chunk", None)
         if callable(drain_pending):
             drain_pending()
