@@ -127,12 +127,11 @@ class JihoMemoryRepository:
         self._reset_session_timer()
 
     def shutdown(self) -> None:
-        if not self._uses_long_term_memory():
-            return
-        with self._session_timer_lock:
-            if self._session_timer is not None:
-                self._session_timer.cancel()
-        self._trigger_session_end()
+        if self._uses_long_term_memory():
+            with self._session_timer_lock:
+                if self._session_timer is not None:
+                    self._session_timer.cancel()
+            self._trigger_session_end()
         self._executor.shutdown(wait=True, cancel_futures=False)
 
     def _save_memory(self, memory_type: str, description: str, poignancy: int) -> None:

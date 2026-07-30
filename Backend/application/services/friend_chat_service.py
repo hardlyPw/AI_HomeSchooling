@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from domain.agents.base import StreamEvent
 from domain.agents.conversation import BaseDebuggableConversationAgent
+from domain.agents.friend_events import FriendStreamEvent
 
 
 class FriendChatService:
@@ -35,5 +35,5 @@ class FriendChatService:
     def end_cooldown(self) -> None:
         self._agent.end_cooldown()
 
-    def stream_reply(self, user_message: str) -> Iterator[StreamEvent]:
+    def stream_reply(self, user_message: str) -> Iterator[FriendStreamEvent]:
         yield from self._agent.stream_reply(user_message)

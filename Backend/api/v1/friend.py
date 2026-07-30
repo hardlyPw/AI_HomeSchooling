@@ -67,7 +67,7 @@ def chat_stream(
     def event_generator():
         try:
             for event in service.stream_reply(request.message):
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(event.to_payload(), ensure_ascii=False)}\n\n"
         except Exception as exc:
             err = json.dumps({"error": str(exc)}, ensure_ascii=False)
             yield f"data: {err}\n\n"

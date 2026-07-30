@@ -6,7 +6,8 @@ from enum import Enum
 import random
 from typing import Callable, Iterator
 
-from domain.agents.base import BaseAgent, StreamEvent
+from domain.agents.base import BaseAgent
+from domain.agents.friend_events import FriendStreamEvent
 
 
 class ConversationCapability(str, Enum):
@@ -105,7 +106,7 @@ class BaseConversationAgent(BaseAgent):
         raise NotImplementedError
 
     @abstractmethod
-    def stream_reply(self, user_message: str) -> Iterator[StreamEvent]:
+    def stream_reply(self, user_message: str) -> Iterator[FriendStreamEvent]:
         raise NotImplementedError
 
     def clamp_affinity(self, value: int) -> int:

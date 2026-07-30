@@ -50,6 +50,19 @@ const EXPRESSION_SRC: Record<Expression, string> = {
   sulk: '/assets/jiho/jiho_sulk.png',
 }
 
+const FRIEND_SESSION_STORAGE_KEY = 'ai-homeschooling.friend-session-id'
+
+function getOrCreateFriendSessionId(): string {
+  const existing = window.localStorage.getItem(FRIEND_SESSION_STORAGE_KEY)
+  if (existing) return existing
+
+  const generated = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  window.localStorage.setItem(FRIEND_SESSION_STORAGE_KEY, generated)
+  return generated
+}
+
 function affinityToExpression(a: number): Expression {
   if (a >= 85) return 'joy'
   if (a >= 60) return 'happy'
@@ -75,11 +88,14 @@ export default function FriendView({ onExit }: Props) {
   const [decisionLog, setDecisionLog] = useState<DecisionLogEntry[]>([])
 
   const idRef = useRef(0)
+  const sessionIdRef = useRef(getOrCreateFriendSessionId())
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/friend/history')
+    fetch('http://localhost:8000/api/v1/friend/history', {
+      headers: { 'X-Session-ID': sessionIdRef.current },
+    })
       .then(r => r.json())
       .then(d => {
         if (typeof d.affinity === 'number') setAffinity(d.affinity)
@@ -119,7 +135,10 @@ export default function FriendView({ onExit }: Props) {
     setIsOnline(true)
     setDecisionLog([])
     try {
-      const r = await fetch('http://localhost:8000/api/v1/friend/reset', { method: 'POST' })
+      const r = await fetch('http://localhost:8000/api/v1/friend/reset', {
+        method: 'POST',
+        headers: { 'X-Session-ID': sessionIdRef.current },
+      })
       const d = await r.json()
       if (typeof d.affinity === 'number') setAffinity(d.affinity)
     } catch {
@@ -130,7 +149,10 @@ export default function FriendView({ onExit }: Props) {
   const forceCooldown = async () => {
     if (isStreaming) return
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown', { method: 'POST' })
+      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown', {
+        method: 'POST',
+        headers: { 'X-Session-ID': sessionIdRef.current },
+      })
       setCooldownArmed(true)
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
@@ -140,7 +162,10 @@ export default function FriendView({ onExit }: Props) {
   const forceDoubleText = async () => {
     if (isStreaming) return
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/double-text', { method: 'POST' })
+      await fetch('http://localhost:8000/api/v1/friend/debug/double-text', {
+        method: 'POST',
+        headers: { 'X-Session-ID': sessionIdRef.current },
+      })
       setDoubleTextArmed(true)
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
@@ -149,7 +174,10 @@ export default function FriendView({ onExit }: Props) {
 
   const endCooldown = async () => {
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown-end', { method: 'POST' })
+      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown-end', {
+        method: 'POST',
+        headers: { 'X-Session-ID': sessionIdRef.current },
+      })
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
     }
@@ -174,7 +202,10 @@ export default function FriendView({ onExit }: Props) {
     try {
       const res = await fetch('http://localhost:8000/api/v1/friend/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Session-ID': sessionIdRef.current,
+        },
         body: JSON.stringify({ message: text }),
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)

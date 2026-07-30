@@ -5,7 +5,7 @@ from types import ModuleType
 
 from infrastructure.adapters.ai_friend_decision import AIFriendDecisionClient
 from infrastructure.adapters.ai_friend_memory import AIFriendMemoryRepository
-from infrastructure.adapters.ai_friend_module import load_ai_friend_module
+from infrastructure.adapters.ai_friend_module import create_ai_friend_runtime_context
 from infrastructure.adapters.ai_friend_prompt import AIFriendPromptBuilder
 from infrastructure.adapters.ai_friend_response import AIFriendResponseGenerator
 from infrastructure.adapters.ai_friend_state import AIFriendStateAdapter
@@ -15,12 +15,12 @@ class AIFriendRuntime:
     """Facade that composes focused adapters around Agent/AI_Friend.py."""
 
     def __init__(self, module: ModuleType | None = None) -> None:
-        legacy_module = module or load_ai_friend_module()
-        self._state = AIFriendStateAdapter(legacy_module)
-        self._memory = AIFriendMemoryRepository(legacy_module)
-        self._decision = AIFriendDecisionClient(legacy_module)
-        self._prompt = AIFriendPromptBuilder(legacy_module)
-        self._response = AIFriendResponseGenerator(legacy_module)
+        runtime_context = module or create_ai_friend_runtime_context()
+        self._state = AIFriendStateAdapter(runtime_context)
+        self._memory = AIFriendMemoryRepository(runtime_context)
+        self._decision = AIFriendDecisionClient(runtime_context)
+        self._prompt = AIFriendPromptBuilder(runtime_context)
+        self._response = AIFriendResponseGenerator(runtime_context)
 
     @property
     def affinity(self) -> int:

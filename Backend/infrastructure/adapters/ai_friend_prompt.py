@@ -21,6 +21,13 @@ class AIFriendPromptBuilder:
     def _state(self):
         return getattr(self._module, "runtime_state", None)
 
+    @property
+    def _memory_loader(self):
+        repository = getattr(self._module, "_memory_repository", None)
+        if repository is not None:
+            return repository.get_long_term_memory
+        return self._module.get_long_term_memory
+
     def build_prompt(
         self,
         *,
@@ -37,7 +44,7 @@ class AIFriendPromptBuilder:
                 user_input=user_input,
                 affinity=self._state.affinity,
                 conversation_history=self._state.conversation_history,
-                memory_loader=self._module.get_long_term_memory,
+                memory_loader=self._memory_loader,
                 time_context_loader=self._state.time_context_tracker.get_time_context,
                 agent_emotion_info=agent_emotion_info,
                 long_term_memories=long_term_memories,

@@ -1,75 +1,21 @@
-import os
 import sys
-import atexit
-from dotenv import load_dotenv
-from supabase import create_client, Client
-from sentence_transformers import SentenceTransformer
-
-from openai import OpenAI
+from ai_friend_bootstrap import create_ai_friend_runtime_context
 from ai_friend_decision import make_decision as make_jiho_decision
 from ai_friend_eval import EXPORT_FILE, export_to_jsonl as export_turn_to_jsonl
 from ai_friend_eval import update_affinity as evaluate_affinity_delta
-from jiho_memory_repository import JihoMemoryRepository
 from ai_friend_prompt_builder import build_runtime_prompt
 from ai_friend_response import generate_response as generate_jiho_response
 from ai_friend_response import split_double_text
-from ai_friend_state import JihoRuntimeState
 from jiho_prompt import ROLE_DISPLAY
 
-# Windows cp949 환경에서도 한글/특수문자(em dash 등) 출력 안전하게
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except Exception:
-    pass
-os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-
-load_dotenv()
-
-url: str = str(os.getenv("SUPABASE_URL", ""))
-key: str = str(os.getenv("SUPABASE_KEY", ""))
-if not url or not key:
-    raise ValueError("❌ .env 파일에서 URL이나 KEY를 읽어오지 못했습니다.")
-supabase: Client = create_client(url, key)
-
-openai_key: str = str(os.getenv("OPENAI_API_KEY", ""))
-if not openai_key:
-    raise ValueError("❌ .env 파일에서 OPENAI_API_KEY를 읽어오지 못했습니다.")
-openai_client = OpenAI(api_key=openai_key)
-
-print("모델 로딩 중...")
-model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-print("모델 로드 완료!")
-
-# ── 페르소나 분리: AI_Friend 전용 테이블/RPC ─────────────────────────
-MEMORY_TABLE = "friend_memories_v2"
-MEMORY_MATCH_RPC = "match_friend_memories_v2"
-
-# ── RAG 트리거 정책: session 단위 consolidation ────────────────────
-# 턴 threshold는 사용하지 않음. session_break(decision layer) /
-# 5분 무대화 timeout / atexit 중 하나가 와야 chunk flush.
-SESSION_TIMEOUT_SECONDS = 5 * 60
-
-DEBUG_PROMPT = True  # True 로 설정하면 프롬프트 조립 과정을 출력
-
-# ── 평가 모드 플래그 ───────────────────────────────────────────────────
-# False = 페르소나 단독 평가 (장기기억 검색·저장 모두 OFF)
-# True  = 풀 시스템 (RAG 활성화)
-USE_LONG_TERM_MEMORY = True
-
-_memory_repository = JihoMemoryRepository(
-    supabase_client=supabase,
-    embedding_model=model,
-    openai_client=openai_client,
-    memory_table=MEMORY_TABLE,
-    memory_match_rpc=MEMORY_MATCH_RPC,
-    session_timeout_seconds=SESSION_TIMEOUT_SECONDS,
-    uses_long_term_memory=lambda: USE_LONG_TERM_MEMORY,
-)
-
-runtime_state = JihoRuntimeState()
-
-# 프로세스 종료 시 pending 세션 자동 마무리 (KeyboardInterrupt 포함)
-atexit.register(lambda: memory_shutdown())
+_runtime_context = create_ai_friend_runtime_context(debug_prompt=True)
+supabase = _runtime_context.supabase
+openai_client = _runtime_context.openai_client
+model = _runtime_context.embedding_model
+_memory_repository = _runtime_context._memory_repository
+runtime_state = _runtime_context.runtime_state
+DEBUG_PROMPT = _runtime_context.DEBUG_PROMPT
+USE_LONG_TERM_MEMORY = _runtime_context.USE_LONG_TERM_MEMORY
 
 # ── 단기기억 시드 ────────────────────────────────────────────────────
 # main 시작 시 conversation_history에 부어넣어서 자연스러운 follow-up 컨텍스트 제공

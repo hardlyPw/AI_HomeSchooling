@@ -11,6 +11,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
 from infrastructure.adapters.ai_friend_state import AIFriendStateAdapter
+from ai_friend_bootstrap import AIFriendDependencies, create_ai_friend_runtime_context
 
 
 class FakeSupabase:
@@ -34,6 +35,11 @@ class FakeTimeTracker:
         return "10:00 PM", "late for a 7th grader"
 
 
+class FakeEmbeddingModel:
+    def encode(self, text: str):
+        return SimpleNamespace(tolist=lambda: [0.1, 0.2])
+
+
 class FakeCompletions:
     def __init__(self, contents: list[str]) -> None:
         self.contents = contents
@@ -49,6 +55,25 @@ class FakeCompletions:
 class FakeOpenAIClient:
     def __init__(self, contents: list[str]) -> None:
         self.chat = SimpleNamespace(completions=FakeCompletions(contents))
+
+
+class FakeStreamingCompletions:
+    def create(self, **kwargs):
+        delta = SimpleNamespace(content="hello")
+        content_chunk = SimpleNamespace(
+            choices=[SimpleNamespace(delta=delta)],
+            usage=None,
+        )
+        usage_chunk = SimpleNamespace(
+            choices=[],
+            usage=SimpleNamespace(prompt_tokens=13, completion_tokens=5),
+        )
+        return iter((content_chunk, usage_chunk))
+
+
+class FakeStreamingOpenAIClient:
+    def __init__(self) -> None:
+        self.chat = SimpleNamespace(completions=FakeStreamingCompletions())
 
 
 class FakeMemoryRepository:
@@ -128,6 +153,33 @@ def fake_native_module() -> SimpleNamespace:
 
 
 class AIFriendRuntimeTest(unittest.TestCase):
+    def test_runtime_contexts_share_clients_but_isolate_mutable_state(self) -> None:
+        dependencies = AIFriendDependencies(
+            supabase=FakeSupabase(),
+            openai_client=FakeOpenAIClient([]),
+            embedding_model=FakeEmbeddingModel(),
+        )
+        first = create_ai_friend_runtime_context(
+            dependencies=dependencies,
+            uses_long_term_memory=False,
+        )
+        second = create_ai_friend_runtime_context(
+            dependencies=dependencies,
+            uses_long_term_memory=False,
+        )
+
+        first.runtime_state.affinity = 12
+        first.runtime_state.conversation_history.append({"role": "user", "text": "private"})
+
+        self.assertIs(first.openai_client, second.openai_client)
+        self.assertIsNot(first.runtime_state, second.runtime_state)
+        self.assertIsNot(first._memory_repository, second._memory_repository)
+        self.assertEqual(second.runtime_state.affinity, 70)
+        self.assertEqual(second.runtime_state.conversation_history, [])
+
+        first._memory_repository.shutdown()
+        second._memory_repository.shutdown()
+
     def test_runtime_delegates_state_memory_decision_prompt_and_response(self) -> None:
         module = fake_module()
         runtime = AIFriendRuntime(module)
@@ -242,6 +294,19 @@ class AIFriendRuntimeTest(unittest.TestCase):
         runtime.reset_state(initial_affinity=70)
 
         self.assertEqual(module._memory_repository.drain_count, 1)
+
+    def test_stream_response_captures_usage_in_runtime_state(self) -> None:
+        module = fake_native_module()
+        module.openai_client = FakeStreamingOpenAIClient()
+        runtime = AIFriendRuntime(module)
+
+        chunks = list(runtime.stream_response("prompt"))
+
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(
+            runtime.last_response_usage,
+            {"prompt_tokens": 13, "completion_tokens": 5},
+        )
 
 
 if __name__ == "__main__":

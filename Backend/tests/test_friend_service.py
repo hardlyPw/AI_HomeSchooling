@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 import sys
 import unittest
 
@@ -11,6 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from services.friend_service import FriendService
 from domain.agents.conversation import ConversationBehaviorConfig
 from domain.agents.conversation_policy import ConversationTimingPolicy
+from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
 
 
 class FakeFriendRuntime:
@@ -100,7 +102,11 @@ class FakeFriendRuntime:
 class FriendServiceTest(unittest.TestCase):
     def service_with_fake_runtime(self) -> tuple[FriendService, FakeFriendRuntime]:
         runtime = FakeFriendRuntime()
-        service = FriendService(runtime)
+        service = FriendService(
+            runtime=runtime,
+            profile=JIHO_PROFILE,
+            behavior=JIHO_BEHAVIOR,
+        )
         service._timing_policy = ConversationTimingPolicy(
             ConversationBehaviorConfig(
                 delay_turn_threshold=100,
@@ -112,6 +118,28 @@ class FriendServiceTest(unittest.TestCase):
             )
         )
         return service, runtime
+
+    def test_service_uses_injected_profile_instead_of_jiho_defaults(self) -> None:
+        runtime = FakeFriendRuntime()
+        profile = replace(
+            JIHO_PROFILE,
+            agent_id="another-friend",
+            display_name="Another Friend",
+            initial_affinity=25,
+            affinity_min=20,
+            affinity_max=30,
+        )
+        service = FriendService(
+            runtime=runtime,
+            profile=profile,
+            behavior=JIHO_BEHAVIOR,
+        )
+
+        runtime.affinity = 29
+        service._apply_delta(10)
+
+        self.assertEqual(runtime.reset_values, [25])
+        self.assertEqual(runtime.affinity, 30)
 
     def test_reset_uses_runtime_and_resets_demo_memory(self) -> None:
         service, runtime = self.service_with_fake_runtime()
@@ -132,7 +160,7 @@ class FriendServiceTest(unittest.TestCase):
         service, runtime = self.service_with_fake_runtime()
         service.force_next_double_text()
 
-        events = list(service.stream_reply("yo"))
+        events = [event.to_payload() for event in service.stream_reply("yo")]
 
         decision_event = next(event for event in events if "decision" in event)
         self.assertEqual(decision_event["decision"]["affinity_prev"], 70)

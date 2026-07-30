@@ -42,7 +42,12 @@ class AIFriendResponseGenerator:
         return self._module._split_double_text(response)
 
     def stream_response(self, prompt: str) -> Iterator:
-        return self._module.openai_client.chat.completions.create(
+        if self._state is not None:
+            self._state.last_response_usage = None
+        else:
+            self._module.last_response_usage = None
+
+        stream = self._module.openai_client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "system", "content": prompt}],
             temperature=0.8,
@@ -50,3 +55,15 @@ class AIFriendResponseGenerator:
             stream=True,
             stream_options={"include_usage": True},
         )
+        for chunk in stream:
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                usage_payload = {
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                }
+                if self._state is not None:
+                    self._state.last_response_usage = usage_payload
+                else:
+                    self._module.last_response_usage = usage_payload
+            yield chunk

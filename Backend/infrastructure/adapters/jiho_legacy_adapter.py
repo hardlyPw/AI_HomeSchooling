@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Iterator
 
-from domain.agents.base import StreamEvent
 from domain.agents.conversation import (
     BaseDebuggableConversationAgent,
     ConversationAgentProfile,
@@ -10,14 +9,21 @@ from domain.agents.conversation import (
     ConversationBehaviorConfig,
 )
 from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
+from domain.agents.friend_runtime import FriendRuntime
+from domain.agents.friend_events import FriendStreamEvent
+from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
 from services.friend_service import FriendService
 
 
 class JihoLegacyAdapter(BaseDebuggableConversationAgent):
     """Adapter around the existing AI_Friend-backed FriendService."""
 
-    def __init__(self) -> None:
-        self._service = FriendService()
+    def __init__(self, runtime: FriendRuntime | None = None) -> None:
+        self._service = FriendService(
+            runtime=runtime or AIFriendRuntime(),
+            profile=JIHO_PROFILE,
+            behavior=JIHO_BEHAVIOR,
+        )
 
     @property
     def profile(self) -> ConversationAgentProfile:
@@ -46,5 +52,5 @@ class JihoLegacyAdapter(BaseDebuggableConversationAgent):
     def end_cooldown(self) -> None:
         self._service.end_cooldown()
 
-    def stream_reply(self, user_message: str) -> Iterator[StreamEvent]:
+    def stream_reply(self, user_message: str) -> Iterator[FriendStreamEvent]:
         yield from self._service.stream_reply(user_message)

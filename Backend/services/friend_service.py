@@ -11,15 +11,28 @@ import threading
 import time
 from typing import Iterator
 
-from domain.agents.conversation import AvailabilityMode
+from domain.agents.conversation import (
+    AvailabilityMode,
+    ConversationAgentProfile,
+    ConversationBehaviorConfig,
+)
 from domain.agents.friend_runtime import FriendRuntime
-from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
+from domain.agents.friend_events import (
+    FriendAffinityEvent,
+    FriendDecisionEvent,
+    FriendDeltaEvent,
+    FriendDoneEvent,
+    FriendMessageBreakEvent,
+    FriendStatusEvent,
+    FriendStreamEvent,
+    FriendTimingEvent,
+    FriendTokenUsageEvent,
+)
 from domain.agents.conversation_policy import (
     AffinityPolicy,
     AwayDecision,
     ConversationTimingPolicy,
 )
-from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
 
 
 class FriendService:
@@ -31,15 +44,21 @@ class FriendService:
     - 프론트가 바로 처리할 수 있게 delta/decision/affinity/done 이벤트를 yield한다.
     """
 
-    def __init__(self, runtime: FriendRuntime | None = None) -> None:
+    def __init__(
+        self,
+        runtime: FriendRuntime,
+        profile: ConversationAgentProfile,
+        behavior: ConversationBehaviorConfig,
+    ) -> None:
         """서버 시작 시 Jiho의 대화/호감도/쿨다운 상태를 깨끗하게 초기화한다."""
-        self._runtime = runtime or AIFriendRuntime()
-        self._runtime.reset_state(JIHO_PROFILE.initial_affinity)
+        self._runtime = runtime
+        self._profile = profile
+        self._runtime.reset_state(self._profile.initial_affinity)
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
         self._cooldown_skip_event = threading.Event()
-        self._behavior = JIHO_BEHAVIOR
+        self._behavior = behavior
         self._timing_policy = ConversationTimingPolicy(self._behavior)
         self._affinity_policy = AffinityPolicy(self._behavior)
 
@@ -60,7 +79,7 @@ class FriendService:
         프론트의 reset 버튼에서 호출된다. 단기기억, 호감도, 쿨다운, 강제 이벤트 플래그를
         초기화하고, 가능하면 Supabase의 데모 장기기억도 기본값으로 되돌린다.
         """
-        self._runtime.reset_state(JIHO_PROFILE.initial_affinity)
+        self._runtime.reset_state(self._profile.initial_affinity)
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
@@ -96,8 +115,8 @@ class FriendService:
             current_affinity=self._runtime.affinity,
             delta=delta,
             consecutive_negative=self._runtime.consecutive_negative,
-            affinity_min=JIHO_PROFILE.affinity_min,
-            affinity_max=JIHO_PROFILE.affinity_max,
+            affinity_min=self._profile.affinity_min,
+            affinity_max=self._profile.affinity_max,
         )
         self._runtime.affinity = result.next_affinity
         self._runtime.consecutive_negative = result.consecutive_negative
@@ -124,7 +143,7 @@ class FriendService:
         return result.decision
 
     # ── Streaming reply ──────────────────────────────────────────────
-    def stream_reply(self, user_message: str) -> Iterator[dict]:
+    def stream_reply(self, user_message: str) -> Iterator[FriendStreamEvent]:
         """사용자 메시지 하나에 대한 Jiho 답변 전체 파이프라인을 실행한다.
 
         실행 순서:
@@ -143,7 +162,7 @@ class FriendService:
 
         if away.mode in {AvailabilityMode.DELAYED, AvailabilityMode.COOLDOWN}:
             # 프론트는 status 이벤트를 보고 typing/offline 상태를 먼저 바꾼다.
-            yield {"status": away.mode.value, "wait_seconds": away.wait_seconds}
+            yield FriendStatusEvent(away.mode.value, away.wait_seconds)
             if away.mode == AvailabilityMode.COOLDOWN:
                 self._cooldown_skip_event.wait(timeout=away.wait_seconds)
                 self._cooldown_skip_event.clear()
@@ -179,8 +198,8 @@ class FriendService:
         )
 
         # 디버그 패널에서 emotion/timing/action/affinity 변화를 보여주기 위한 이벤트.
-        yield {
-            "decision": {
+        yield FriendDecisionEvent(
+            {
                 "user_message": user_message,
                 "emotion": decision.get("emotion", ""),
                 "emotion_reason": decision.get("emotion_reason", ""),
@@ -193,7 +212,7 @@ class FriendService:
                 "reasoning": decision.get("reasoning", ""),
                 "away_mode": away.mode.value,
             }
-        }
+        )
 
         # Build prompt with full persona + RAG + STM + decision cues + emotion
         prompt = self._runtime.build_prompt(
@@ -215,8 +234,8 @@ class FriendService:
             # cooldown 뒤 돌아왔다는 느낌을 주기 위해 첫 말 앞에 짧은 excuse를 붙인다.
             prefix = f"yo sry was {away.reason}."
             collected.append(prefix)
-            yield {"delta": prefix}
-            yield {"message_break": True}
+            yield FriendDeltaEvent(prefix)
+            yield FriendMessageBreakEvent()
 
         reply_prompt_tokens: int | None = None
         reply_completion_tokens: int | None = None
@@ -227,11 +246,11 @@ class FriendService:
             ai_replies = self._runtime.split_double_text(ai_raw)
             for idx, msg in enumerate(ai_replies):
                 if idx > 0:
-                    yield {"message_break": True}
+                    yield FriendMessageBreakEvent()
                 if first_delta_seconds is None:
                     first_delta_seconds = time.perf_counter() - llm_started
                 collected.append((" " if collected else "") + msg)
-                yield {"delta": msg}
+                yield FriendDeltaEvent(msg)
             usage = self._runtime.last_response_usage
             if usage:
                 reply_prompt_tokens = usage.get("prompt_tokens")
@@ -241,9 +260,6 @@ class FriendService:
             stream = self._runtime.stream_response(prompt)
 
             for chunk in stream:
-                if getattr(chunk, "usage", None) is not None:
-                    reply_prompt_tokens = chunk.usage.prompt_tokens
-                    reply_completion_tokens = chunk.usage.completion_tokens
                 if not chunk.choices:
                     continue
                 piece = chunk.choices[0].delta.content
@@ -251,7 +267,11 @@ class FriendService:
                     if first_delta_seconds is None:
                         first_delta_seconds = time.perf_counter() - llm_started
                     collected.append(piece)
-                    yield {"delta": piece}
+                    yield FriendDeltaEvent(piece)
+            usage = self._runtime.last_response_usage
+            if usage:
+                reply_prompt_tokens = usage.get("prompt_tokens")
+                reply_completion_tokens = usage.get("completion_tokens")
             print(f"[Latency] GPT 답변: {time.perf_counter() - llm_started:.4f}초")
 
         reply = "".join(collected).strip() or "brb"
@@ -289,23 +309,19 @@ class FriendService:
         )
 
         # 여기부터는 실제 답변 내용이 아니라 프론트 디버그/상태 갱신용 마무리 이벤트들이다.
-        yield {"timing": {"total_seconds": round(total_seconds, 2)}}
+        yield FriendTimingEvent(round(total_seconds, 2))
 
         decision_usage = decision.get("_usage") or {}
         decision_prompt = decision_usage.get("prompt_tokens")
         decision_completion = decision_usage.get("completion_tokens")
-        token_components = [
-            (decision_prompt or 0) + (decision_completion or 0),
-            (reply_prompt_tokens or 0) + (reply_completion_tokens or 0),
-        ]
-        yield {
-            "tokens": {
-                "decision_prompt": decision_prompt,
-                "decision_completion": decision_completion,
-                "reply_prompt": reply_prompt_tokens,
-                "reply_completion": reply_completion_tokens,
-                "total": sum(token_components) if any(token_components) else None,
-            }
-        }
-        yield {"affinity": self._runtime.affinity, "affinity_prev": old_affinity}
-        yield {"done": True}
+        yield FriendTokenUsageEvent(
+            decision_prompt=decision_prompt,
+            decision_completion=decision_completion,
+            reply_prompt=reply_prompt_tokens,
+            reply_completion=reply_completion_tokens,
+        )
+        yield FriendAffinityEvent(
+            affinity=self._runtime.affinity,
+            affinity_prev=old_affinity,
+        )
+        yield FriendDoneEvent()
