@@ -11,6 +11,11 @@ export const agentRegistry: Record<string, AgentProfile> = {
     historyEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/history`,
     stateEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/state`,
     resetEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/reset`,
+    debugEndpoints: {
+      cooldown: `${BACKEND_BASE_URL}/api/v1/friend/debug/cooldown`,
+      doubleText: `${BACKEND_BASE_URL}/api/v1/friend/debug/double-text`,
+      cooldownEnd: `${BACKEND_BASE_URL}/api/v1/friend/debug/cooldown-end`,
+    },
     capabilities: ['free-chat', 'affinity', 'debug-telemetry'],
     avatarByMood: {
       joy: '/assets/jiho/jiho_joy.png',

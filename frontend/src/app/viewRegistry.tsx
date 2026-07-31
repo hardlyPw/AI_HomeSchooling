@@ -25,9 +25,9 @@ export const viewRegistry: Record<AppMode, ViewRenderer> = {
       <HomeView vm={homeVm} />
     </div>
   ),
-  'agent-chat': ({ openHome }) => (
+  'agent-chat': ({ selectedAgentId, openHome }) => (
     <div className="main-layout">
-      <FriendView onExit={openHome} />
+      <FriendView agentId={selectedAgentId} onExit={openHome} />
     </div>
   ),
   playlist: ({ selectedLectureId, lectureThumbnails, openLecture }) => (

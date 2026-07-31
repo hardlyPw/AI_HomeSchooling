@@ -9,6 +9,11 @@ export interface AgentProfile {
   historyEndpoint?: string
   stateEndpoint?: string
   resetEndpoint?: string
+  debugEndpoints?: {
+    cooldown: string
+    doubleText: string
+    cooldownEnd: string
+  }
   capabilities: AgentCapability[]
   avatarByMood?: Record<string, string>
 }
