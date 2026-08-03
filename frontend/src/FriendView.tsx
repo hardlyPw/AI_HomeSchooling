@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, RotateCw } from 'lucide-react'
+import { ArrowLeft, Bot, RotateCw } from 'lucide-react'
 import { agentChatClient } from './clients/agents/AgentChatClient'
 import { getAgentProfile } from './domain/agents/agentRegistry'
 
@@ -78,7 +78,7 @@ export default function FriendView({ agentId, onExit }: Props) {
   const agent = getAgentProfile(agentId)
   const [messages, setMessages] = useState<FriendMessage[]>([])
   const [input, setInput] = useState('')
-  const [affinity, setAffinity] = useState(70)
+  const [affinity, setAffinity] = useState(agent.initialAffinity)
   const [isStreaming, setIsStreaming] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
@@ -123,6 +123,8 @@ export default function FriendView({ agentId, onExit }: Props) {
   }, [messages, isTyping])
 
   const expression = affinityToExpression(affinity)
+  const hasAvatar = Boolean(agent.avatarByMood)
+  const canDebug = agent.capabilities.includes('debug-telemetry')
 
   const reset = async () => {
     if (isStreaming) return
@@ -135,7 +137,7 @@ export default function FriendView({ agentId, onExit }: Props) {
       const d = await agentChatClient.reset<FriendResetResponse>(agentId)
       if (typeof d.affinity === 'number') setAffinity(d.affinity)
     } catch {
-      setAffinity(70)
+      setAffinity(agent.initialAffinity)
     }
   }
 
@@ -364,15 +366,22 @@ export default function FriendView({ agentId, onExit }: Props) {
       )}
       <aside className={`friend-stage stage-${expression}`}>
         <div className="friend-stage-inner">
-          {(['joy', 'happy', 'neutral', 'annoyed', 'sulk'] as Expression[]).map(exp => (
-            <img
-              key={exp}
-              src={agent.avatarByMood?.[exp] ?? EXPRESSION_SRC[exp]}
-              alt={`${agent.name} ${exp}`}
-              className={`friend-portrait ${expression === exp ? 'active' : ''}`}
-              draggable={false}
-            />
-          ))}
+          {hasAvatar ? (
+            (['joy', 'happy', 'neutral', 'annoyed', 'sulk'] as Expression[]).map(exp => (
+              <img
+                key={exp}
+                src={agent.avatarByMood?.[exp] ?? EXPRESSION_SRC[exp]}
+                alt={`${agent.name} ${exp}`}
+                className={`friend-portrait ${expression === exp ? 'active' : ''}`}
+                draggable={false}
+              />
+            ))
+          ) : (
+            <div className="friend-portrait-placeholder" aria-label={`${agent.name} avatar`}>
+              <Bot size={52} />
+              <strong>{agent.name.slice(0, 2).toUpperCase()}</strong>
+            </div>
+          )}
         </div>
 
         {showDebug && (
@@ -384,7 +393,7 @@ export default function FriendView({ agentId, onExit }: Props) {
 
       <section className="friend-chat">
         <header className="friend-chat-header">
-          <button className="friend-back" onClick={onExit} aria-label="Back to lesson">
+          <button className="friend-back" onClick={onExit} aria-label="Back to home">
             <ArrowLeft size={18} />
           </button>
           <div className="friend-chat-title">
@@ -394,13 +403,15 @@ export default function FriendView({ agentId, onExit }: Props) {
               {isOnline ? 'online' : 'offline'}
             </span>
           </div>
-          <button
-            className={`friend-debug-toggle ${showDebug ? 'on' : ''}`}
-            onClick={() => setShowDebug(v => !v)}
-            title="Toggle debug"
-          >
-            dbg
-          </button>
+          {canDebug && (
+            <button
+              className={`friend-debug-toggle ${showDebug ? 'on' : ''}`}
+              onClick={() => setShowDebug(v => !v)}
+              title="Toggle debug"
+            >
+              dbg
+            </button>
+          )}
           {showDebug && (
             <>
               <button

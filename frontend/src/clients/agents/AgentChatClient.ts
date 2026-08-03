@@ -1,11 +1,14 @@
 import { getAgentProfile } from '../../domain/agents/agentRegistry'
 import { httpClient } from '../httpClient'
 import { sseClient, type SseMessageHandler } from '../sseClient'
-import { getOrCreateFriendSessionId } from './friendSession'
+import { getOrCreateFriendSessionId, getOrCreateFriendUserId } from './friendSession'
 
 export class AgentChatClient {
   private get sessionHeaders(): HeadersInit {
-    return { 'X-Session-ID': getOrCreateFriendSessionId() }
+    return {
+      'X-Session-ID': getOrCreateFriendSessionId(),
+      'X-User-ID': getOrCreateFriendUserId(),
+    }
   }
 
   getHistory<T>(agentId: string): Promise<T> {

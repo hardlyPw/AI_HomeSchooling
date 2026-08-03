@@ -5,6 +5,7 @@ export interface AgentProfile {
   name: string
   description: string
   entryLabel: string
+  initialAffinity: number
   chatEndpoint: string
   historyEndpoint?: string
   stateEndpoint?: string

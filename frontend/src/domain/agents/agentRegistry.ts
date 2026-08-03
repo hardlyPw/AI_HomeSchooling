@@ -7,14 +7,15 @@ export const agentRegistry: Record<string, AgentProfile> = {
     name: 'Jiho',
     description: 'A blunt peer friend with affinity, memory, and debug telemetry.',
     entryLabel: 'Talk with Jiho',
-    chatEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/chat/stream`,
-    historyEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/history`,
-    stateEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/state`,
-    resetEndpoint: `${BACKEND_BASE_URL}/api/v1/friend/reset`,
+    initialAffinity: 70,
+    chatEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/chat/stream`,
+    historyEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/history`,
+    stateEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/state`,
+    resetEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/reset`,
     debugEndpoints: {
-      cooldown: `${BACKEND_BASE_URL}/api/v1/friend/debug/cooldown`,
-      doubleText: `${BACKEND_BASE_URL}/api/v1/friend/debug/double-text`,
-      cooldownEnd: `${BACKEND_BASE_URL}/api/v1/friend/debug/cooldown-end`,
+      cooldown: `${BACKEND_BASE_URL}/api/v1/agents/jiho/debug/cooldown`,
+      doubleText: `${BACKEND_BASE_URL}/api/v1/agents/jiho/debug/double-text`,
+      cooldownEnd: `${BACKEND_BASE_URL}/api/v1/agents/jiho/debug/cooldown-end`,
     },
     capabilities: ['free-chat', 'affinity', 'debug-telemetry'],
     avatarByMood: {
@@ -30,3 +31,14 @@ export const agentRegistry: Record<string, AgentProfile> = {
 export const getAgentProfile = (agentId: string) => agentRegistry[agentId] ?? agentRegistry.jiho
 
 export const listAgentProfiles = () => Object.values(agentRegistry)
+
+export const upsertAgentProfiles = (profiles: AgentProfile[]) => {
+  profiles.forEach(profile => {
+    const existing = agentRegistry[profile.id]
+    agentRegistry[profile.id] = {
+      ...existing,
+      ...profile,
+      avatarByMood: profile.avatarByMood ?? existing?.avatarByMood,
+    }
+  })
+}
