@@ -5,9 +5,17 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import math
+from pathlib import Path
+import sys
 import threading
 import time
 from typing import Any, cast
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1] / "Backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from domain.agents.conversation import ModelInvocationConfig  # noqa: E402
 
 
 class JihoMemoryRepository:
@@ -23,6 +31,7 @@ class JihoMemoryRepository:
         memory_match_rpc: str,
         session_timeout_seconds: int,
         uses_long_term_memory: Callable[[], bool],
+        extraction_model: ModelInvocationConfig,
     ) -> None:
         self._supabase = supabase_client
         self._embedding_model = embedding_model
@@ -31,6 +40,7 @@ class JihoMemoryRepository:
         self._memory_match_rpc = memory_match_rpc
         self._session_timeout_seconds = session_timeout_seconds
         self._uses_long_term_memory = uses_long_term_memory
+        self._extraction_model = extraction_model
         self._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="memory")
         self._pending_chunk_lock = threading.Lock()
         self._pending_chunk: list[dict] = []
@@ -171,7 +181,7 @@ class JihoMemoryRepository:
 
         try:
             response = self._openai_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self._extraction_model.model,
                 messages=[
                     {
                         "role": "system",
@@ -231,8 +241,8 @@ class JihoMemoryRepository:
                         ),
                     },
                 ],
-                max_tokens=1200,
-                temperature=0,
+                max_tokens=self._extraction_model.max_tokens,
+                temperature=self._extraction_model.temperature,
                 response_format={"type": "json_object"},
             )
             raw = (response.choices[0].message.content or "").strip()

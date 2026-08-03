@@ -7,6 +7,7 @@ import random
 from typing import Callable, Iterator
 
 from domain.agents.base import BaseAgent
+from domain.agents.definition import AgentDefinition
 from domain.agents.friend_events import FriendStreamEvent
 
 
@@ -30,13 +31,25 @@ class AvailabilityMode(str, Enum):
 
 
 @dataclass(frozen=True)
+class ConversationPersonaConfig:
+    """Natural-language character material produced by the Agent designer."""
+
+    narrative: str
+    user_profile: str
+    decision_guidance: str
+    affinity_rubric: str
+    affinity_stage_directions: tuple[str, str, str, str]
+    behavior_bans: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ConversationAgentProfile:
     """Static identity and persona data shared by friend-style agents."""
 
     agent_id: str
     display_name: str
     description: str
-    persona: str
+    persona: ConversationPersonaConfig
     initial_affinity: int
     affinity_min: int = 0
     affinity_max: int = 100
@@ -63,6 +76,60 @@ class ConversationBehaviorConfig:
 
 
 @dataclass(frozen=True)
+class ModelInvocationConfig:
+    """Fixed model invocation settings unavailable to user-generated content."""
+
+    model: str
+    temperature: float
+    max_tokens: int
+
+
+@dataclass(frozen=True)
+class ConversationMemoryConfig:
+    """Storage and retrieval policy for a conversation agent."""
+
+    enabled: bool
+    table_name: str
+    match_rpc_name: str
+    reset_rpc_name: str
+    embedding_model: str
+    session_timeout_seconds: int
+    low_affinity_top_k: int
+    normal_top_k: int
+    top_k_affinity_cutoff: int
+    extraction_model: ModelInvocationConfig
+
+
+@dataclass(frozen=True)
+class ConversationPromptConfig:
+    """Prompt context limits and affinity bands shared by prompt strategies."""
+
+    response_history_limit: int
+    decision_history_limit: int
+    affinity_stage_maxima: tuple[int, int, int]
+    affinity_delta_min: int
+    affinity_delta_max: int
+
+
+@dataclass(frozen=True)
+class ConversationRuntimeConfig:
+    """System-owned settings that generated Agents cannot override."""
+
+    response_model: ModelInvocationConfig
+    decision_model: ModelInvocationConfig
+    memory: ConversationMemoryConfig
+    prompt: ConversationPromptConfig
+    system_safety_rules: tuple[str, ...]
+
+
+ConversationAgentDefinition = AgentDefinition[
+    ConversationAgentProfile,
+    ConversationBehaviorConfig,
+    ConversationRuntimeConfig,
+]
+
+
+@dataclass(frozen=True)
 class ConversationAgentState:
     """Runtime state that the UI or application layer can inspect."""
 
@@ -77,13 +144,16 @@ class BaseConversationAgent(BaseAgent):
 
     @property
     @abstractmethod
-    def profile(self) -> ConversationAgentProfile:
+    def definition(self) -> ConversationAgentDefinition:
         raise NotImplementedError
 
     @property
-    @abstractmethod
+    def profile(self) -> ConversationAgentProfile:
+        return self.definition.profile
+
+    @property
     def behavior(self) -> ConversationBehaviorConfig:
-        raise NotImplementedError
+        return self.definition.behavior
 
     @property
     def agent_id(self) -> str:

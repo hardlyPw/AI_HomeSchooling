@@ -16,7 +16,15 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+import sys
 from typing import Any
+
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1] / "Backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from domain.agents.jiho import JIHO_DEFINITION
 
 
 @dataclass(frozen=True)
@@ -101,19 +109,22 @@ def _reset_runtime_state(af: Any) -> None:
             pass
         af._session_timer = None
     if hasattr(af, "runtime_state"):
-        af.runtime_state.reset(70)
+        af.runtime_state.reset(JIHO_DEFINITION.profile.initial_affinity)
         af.runtime_state.conversation_history.extend(af.INITIAL_HISTORY)
     else:
         af.conversation_history.clear()
         af.conversation_history.extend(af.INITIAL_HISTORY)
-        af.affinity = 70
+        af.affinity = JIHO_DEFINITION.profile.initial_affinity
         af.consecutive_negative = 0
         if hasattr(af, "_session_time_buckets_seen"):
             af._session_time_buckets_seen.clear()
 
 
 def _reset_db_to_demo_seed(af: Any) -> None:
-    result = af.supabase.rpc("reset_friend_memories_v2_to_demo_seed", {}).execute()
+    result = af.supabase.rpc(
+        JIHO_DEFINITION.runtime.memory.reset_rpc_name,
+        {},
+    ).execute()
     count = result.data
     print(f"[DB reset] friend_memories_v2 restored from demo seed: {count}")
 
@@ -127,7 +138,12 @@ def _run_turn(
     export_jsonl: bool,
 ) -> dict[str, Any]:
     state = getattr(af, "runtime_state", af)
-    top_k = 1 if state.affinity <= 40 else 5
+    memory_config = JIHO_DEFINITION.runtime.memory
+    top_k = (
+        memory_config.low_affinity_top_k
+        if state.affinity <= memory_config.top_k_affinity_cutoff
+        else memory_config.normal_top_k
+    )
     long_term = af.get_long_term_memory(user_input, top_k) if af.USE_LONG_TERM_MEMORY else []
     time_str, time_ctx = af._consume_time_context_for_turn()
 

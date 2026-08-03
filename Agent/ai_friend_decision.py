@@ -6,6 +6,7 @@ import json
 import time
 
 from jiho_decision_prompt import render_jiho_decision_prompt
+from domain.agents.jiho import JIHO_DEFINITION
 
 
 VALID_TIMINGS = {"instant", "delayed", "double_text", "wrap_up"}
@@ -55,11 +56,12 @@ def make_decision(
 
     try:
         start = time.time()
+        model_config = JIHO_DEFINITION.runtime.decision_model
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model_config.model,
             messages=[{"role": "system", "content": system_prompt}],
-            max_tokens=200,
-            temperature=0.6,
+            max_tokens=model_config.max_tokens,
+            temperature=model_config.temperature,
             response_format={"type": "json_object"},
         )
         raw = (response.choices[0].message.content or "").strip()
@@ -104,7 +106,11 @@ def normalize_decision(decision: dict, *, came_back_from: str | None = None) -> 
         decision["session_break"] = True
 
     try:
-        decision["affinity_delta"] = max(-10, min(10, int(decision.get("affinity_delta", 0))))
+        prompt_config = JIHO_DEFINITION.runtime.prompt
+        decision["affinity_delta"] = max(
+            prompt_config.affinity_delta_min,
+            min(prompt_config.affinity_delta_max, int(decision.get("affinity_delta", 0))),
+        )
     except (TypeError, ValueError):
         decision["affinity_delta"] = 0
 

@@ -1,10 +1,17 @@
 export type SseMessageHandler = (event: Record<string, unknown>) => void
 
 export class SseClient {
-  async postJsonStream<TBody>(url: string, body: TBody, onMessage: SseMessageHandler): Promise<void> {
+  async postJsonStream<TBody>(
+    url: string,
+    body: TBody,
+    onMessage: SseMessageHandler,
+    headers?: HeadersInit,
+  ): Promise<void> {
+    const requestHeaders = new Headers(headers)
+    requestHeaders.set('Content-Type', 'application/json')
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders,
       body: JSON.stringify(body),
     })
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)

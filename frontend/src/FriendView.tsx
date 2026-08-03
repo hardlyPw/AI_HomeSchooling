@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, RotateCw } from 'lucide-react'
+import { agentChatClient } from './clients/agents/AgentChatClient'
+import { getAgentProfile } from './domain/agents/agentRegistry'
 
 type Expression = 'joy' | 'happy' | 'neutral' | 'annoyed' | 'sulk'
 
@@ -13,6 +15,15 @@ interface FriendMessage {
 interface FriendHistoryMessage {
   role: 'user' | 'ai' | 'assistant'
   text: string
+}
+
+interface FriendHistoryResponse {
+  affinity: number
+  messages: FriendHistoryMessage[]
+}
+
+interface FriendResetResponse {
+  affinity: number
 }
 
 interface DecisionLogEntry {
@@ -50,19 +61,6 @@ const EXPRESSION_SRC: Record<Expression, string> = {
   sulk: '/assets/jiho/jiho_sulk.png',
 }
 
-const FRIEND_SESSION_STORAGE_KEY = 'ai-homeschooling.friend-session-id'
-
-function getOrCreateFriendSessionId(): string {
-  const existing = window.localStorage.getItem(FRIEND_SESSION_STORAGE_KEY)
-  if (existing) return existing
-
-  const generated = typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  window.localStorage.setItem(FRIEND_SESSION_STORAGE_KEY, generated)
-  return generated
-}
-
 function affinityToExpression(a: number): Expression {
   if (a >= 85) return 'joy'
   if (a >= 60) return 'happy'
@@ -72,10 +70,12 @@ function affinityToExpression(a: number): Expression {
 }
 
 interface Props {
+  agentId: string
   onExit: () => void
 }
 
-export default function FriendView({ onExit }: Props) {
+export default function FriendView({ agentId, onExit }: Props) {
+  const agent = getAgentProfile(agentId)
   const [messages, setMessages] = useState<FriendMessage[]>([])
   const [input, setInput] = useState('')
   const [affinity, setAffinity] = useState(70)
@@ -88,21 +88,18 @@ export default function FriendView({ onExit }: Props) {
   const [decisionLog, setDecisionLog] = useState<DecisionLogEntry[]>([])
 
   const idRef = useRef(0)
-  const sessionIdRef = useRef(getOrCreateFriendSessionId())
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/friend/history', {
-      headers: { 'X-Session-ID': sessionIdRef.current },
-    })
-      .then(r => r.json())
+    agentChatClient
+      .getHistory<FriendHistoryResponse>(agentId)
       .then(d => {
         if (typeof d.affinity === 'number') setAffinity(d.affinity)
         if (Array.isArray(d.messages)) {
           const restored = d.messages
             .filter((m: FriendHistoryMessage) => m.role === 'user' || m.role === 'ai' || m.role === 'assistant')
-            .map((m: FriendHistoryMessage, index: number) => ({
+            .map((m: FriendHistoryMessage, index: number): FriendMessage => ({
               role: m.role === 'user' ? 'user' : 'assistant',
               text: m.text,
               id: index + 1,
@@ -113,7 +110,7 @@ export default function FriendView({ onExit }: Props) {
         }
       })
       .catch(() => {})
-  }, [])
+  }, [agentId])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -135,11 +132,7 @@ export default function FriendView({ onExit }: Props) {
     setIsOnline(true)
     setDecisionLog([])
     try {
-      const r = await fetch('http://localhost:8000/api/v1/friend/reset', {
-        method: 'POST',
-        headers: { 'X-Session-ID': sessionIdRef.current },
-      })
-      const d = await r.json()
+      const d = await agentChatClient.reset<FriendResetResponse>(agentId)
       if (typeof d.affinity === 'number') setAffinity(d.affinity)
     } catch {
       setAffinity(70)
@@ -149,10 +142,7 @@ export default function FriendView({ onExit }: Props) {
   const forceCooldown = async () => {
     if (isStreaming) return
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown', {
-        method: 'POST',
-        headers: { 'X-Session-ID': sessionIdRef.current },
-      })
+      await agentChatClient.forceCooldown(agentId)
       setCooldownArmed(true)
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
@@ -162,10 +152,7 @@ export default function FriendView({ onExit }: Props) {
   const forceDoubleText = async () => {
     if (isStreaming) return
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/double-text', {
-        method: 'POST',
-        headers: { 'X-Session-ID': sessionIdRef.current },
-      })
+      await agentChatClient.forceDoubleText(agentId)
       setDoubleTextArmed(true)
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
@@ -174,10 +161,7 @@ export default function FriendView({ onExit }: Props) {
 
   const endCooldown = async () => {
     try {
-      await fetch('http://localhost:8000/api/v1/friend/debug/cooldown-end', {
-        method: 'POST',
-        headers: { 'X-Session-ID': sessionIdRef.current },
-      })
+      await agentChatClient.endCooldown(agentId)
     } catch {
       // Debug helper only; keep the demo UI calm if the backend is not reachable.
     }
@@ -200,117 +184,100 @@ export default function FriendView({ onExit }: Props) {
     let assistantStarted = false
 
     try {
-      const res = await fetch('http://localhost:8000/api/v1/friend/chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Session-ID': sessionIdRef.current,
-        },
-        body: JSON.stringify({ message: text }),
-      })
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buf = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-
-        let sep
-        while ((sep = buf.indexOf('\n\n')) !== -1) {
-          const raw = buf.slice(0, sep)
-          buf = buf.slice(sep + 2)
-          for (const line of raw.split('\n')) {
-            if (!line.startsWith('data: ')) continue
-            const data = line.slice(6)
-            try {
-              const obj = JSON.parse(data)
-              if (obj.message_break) {
-                activeAssistantId = ++idRef.current
-                assistantStarted = true
-                setIsTyping(false)
-                const nextAssistantId = activeAssistantId
-                setMessages(prev => [...prev, { role: 'assistant', text: '', id: nextAssistantId, timestamp: nowHHMM() }])
-              } else if (typeof obj.delta === 'string') {
-                setIsOnline(true)
-                const targetAssistantId = activeAssistantId
-                if (!assistantStarted) {
-                  assistantStarted = true
-                  setIsTyping(false)
-                  setMessages(prev => [...prev, { role: 'assistant', text: '', id: targetAssistantId, timestamp: nowHHMM() }])
-                }
-                setMessages(prev => prev.map(m =>
-                  m.id === targetAssistantId ? { ...m, text: m.text + obj.delta } : m
-                ))
-              } else if (typeof obj.affinity === 'number') {
-                setAffinity(obj.affinity)
-              } else if (obj.decision) {
-                const d = obj.decision
-                setDecisionLog(prev => [...prev, {
-                  id: ++idRef.current,
-                  turn: prev.length + 1,
-                  timestamp: nowHHMM(),
-                  user_message: String(d.user_message ?? ''),
-                  emotion: String(d.emotion ?? ''),
-                  emotion_reason: String(d.emotion_reason ?? ''),
-                  timing: String(d.timing ?? ''),
-                  action: String(d.action ?? ''),
-                  affinity_prev: Number(d.affinity_prev ?? 0),
-                  affinity_next: Number(d.affinity_next ?? 0),
-                  affinity_delta: Number(d.affinity_delta ?? 0),
-                  affinity_reason: String(d.affinity_reason ?? ''),
-                  reasoning: String(d.reasoning ?? ''),
-                  away_mode: String(d.away_mode ?? ''),
-                  response_seconds: null,
-                  decision_prompt_tokens: null,
-                  decision_completion_tokens: null,
-                  reply_prompt_tokens: null,
-                  reply_completion_tokens: null,
-                  total_tokens: null,
-                }])
-              } else if (obj.timing && typeof obj.timing.total_seconds === 'number') {
-                const secs = obj.timing.total_seconds
-                setDecisionLog(prev => {
-                  if (prev.length === 0) return prev
-                  const next = prev.slice()
-                  next[next.length - 1] = { ...next[next.length - 1], response_seconds: secs }
-                  return next
-                })
-              } else if (obj.tokens) {
-                const tk = obj.tokens
-                setDecisionLog(prev => {
-                  if (prev.length === 0) return prev
-                  const next = prev.slice()
-                  next[next.length - 1] = {
-                    ...next[next.length - 1],
-                    decision_prompt_tokens: typeof tk.decision_prompt === 'number' ? tk.decision_prompt : null,
-                    decision_completion_tokens: typeof tk.decision_completion === 'number' ? tk.decision_completion : null,
-                    reply_prompt_tokens: typeof tk.reply_prompt === 'number' ? tk.reply_prompt : null,
-                    reply_completion_tokens: typeof tk.reply_completion === 'number' ? tk.reply_completion : null,
-                    total_tokens: typeof tk.total === 'number' ? tk.total : null,
-                  }
-                  return next
-                })
-              } else if (obj.status === 'cooldown') {
-                setIsOnline(false)
-                setIsTyping(false)
-              } else if (obj.status === 'delayed') {
-                setIsTyping(true)
-              } else if (obj.error) {
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  text: `⚠️ ${obj.error}`,
-                  id: ++idRef.current,
-                  timestamp: nowHHMM(),
-                }])
-              }
-            } catch { /* ignore */ }
+      await agentChatClient.streamMessage(agentId, text, obj => {
+        if (obj.message_break === true) {
+          activeAssistantId = ++idRef.current
+          assistantStarted = true
+          setIsTyping(false)
+          const nextAssistantId = activeAssistantId
+          setMessages(prev => [
+            ...prev,
+            { role: 'assistant', text: '', id: nextAssistantId, timestamp: nowHHMM() },
+          ])
+        } else if (typeof obj.delta === 'string') {
+          setIsOnline(true)
+          const targetAssistantId = activeAssistantId
+          const delta = obj.delta
+          if (!assistantStarted) {
+            assistantStarted = true
+            setIsTyping(false)
+            setMessages(prev => [
+              ...prev,
+              { role: 'assistant', text: '', id: targetAssistantId, timestamp: nowHHMM() },
+            ])
           }
+          setMessages(prev => prev.map(message =>
+            message.id === targetAssistantId
+              ? { ...message, text: message.text + delta }
+              : message
+          ))
+        } else if (typeof obj.affinity === 'number') {
+          setAffinity(obj.affinity)
+        } else if (obj.decision && typeof obj.decision === 'object') {
+          const decision = obj.decision as Record<string, unknown>
+          setDecisionLog(prev => [...prev, {
+            id: ++idRef.current,
+            turn: prev.length + 1,
+            timestamp: nowHHMM(),
+            user_message: String(decision.user_message ?? ''),
+            emotion: String(decision.emotion ?? ''),
+            emotion_reason: String(decision.emotion_reason ?? ''),
+            timing: String(decision.timing ?? ''),
+            action: String(decision.action ?? ''),
+            affinity_prev: Number(decision.affinity_prev ?? 0),
+            affinity_next: Number(decision.affinity_next ?? 0),
+            affinity_delta: Number(decision.affinity_delta ?? 0),
+            affinity_reason: String(decision.affinity_reason ?? ''),
+            reasoning: String(decision.reasoning ?? ''),
+            away_mode: String(decision.away_mode ?? ''),
+            response_seconds: null,
+            decision_prompt_tokens: null,
+            decision_completion_tokens: null,
+            reply_prompt_tokens: null,
+            reply_completion_tokens: null,
+            total_tokens: null,
+          }])
+        } else if (obj.timing && typeof obj.timing === 'object') {
+          const timing = obj.timing as Record<string, unknown>
+          if (typeof timing.total_seconds !== 'number') return
+          setDecisionLog(prev => {
+            if (prev.length === 0) return prev
+            const next = prev.slice()
+            next[next.length - 1] = {
+              ...next[next.length - 1],
+              response_seconds: timing.total_seconds as number,
+            }
+            return next
+          })
+        } else if (obj.tokens && typeof obj.tokens === 'object') {
+          const tokens = obj.tokens as Record<string, unknown>
+          setDecisionLog(prev => {
+            if (prev.length === 0) return prev
+            const next = prev.slice()
+            next[next.length - 1] = {
+              ...next[next.length - 1],
+              decision_prompt_tokens: typeof tokens.decision_prompt === 'number' ? tokens.decision_prompt : null,
+              decision_completion_tokens: typeof tokens.decision_completion === 'number' ? tokens.decision_completion : null,
+              reply_prompt_tokens: typeof tokens.reply_prompt === 'number' ? tokens.reply_prompt : null,
+              reply_completion_tokens: typeof tokens.reply_completion === 'number' ? tokens.reply_completion : null,
+              total_tokens: typeof tokens.total === 'number' ? tokens.total : null,
+            }
+            return next
+          })
+        } else if (obj.status === 'cooldown') {
+          setIsOnline(false)
+          setIsTyping(false)
+        } else if (obj.status === 'delayed') {
+          setIsTyping(true)
+        } else if (obj.error) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            text: `⚠️ ${String(obj.error)}`,
+            id: ++idRef.current,
+            timestamp: nowHHMM(),
+          }])
         }
-      }
+      })
     } catch (err) {
       console.error(err)
       setMessages(prev => [...prev, {
@@ -400,8 +367,8 @@ export default function FriendView({ onExit }: Props) {
           {(['joy', 'happy', 'neutral', 'annoyed', 'sulk'] as Expression[]).map(exp => (
             <img
               key={exp}
-              src={EXPRESSION_SRC[exp]}
-              alt={`Jiho ${exp}`}
+              src={agent.avatarByMood?.[exp] ?? EXPRESSION_SRC[exp]}
+              alt={`${agent.name} ${exp}`}
               className={`friend-portrait ${expression === exp ? 'active' : ''}`}
               draggable={false}
             />
@@ -421,7 +388,7 @@ export default function FriendView({ onExit }: Props) {
             <ArrowLeft size={18} />
           </button>
           <div className="friend-chat-title">
-            <span className="friend-name">Jiho</span>
+            <span className="friend-name">{agent.name}</span>
             <span className={`friend-status ${isOnline ? 'online' : 'offline'}`}>
               <span className="friend-status-dot" />
               {isOnline ? 'online' : 'offline'}

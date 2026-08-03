@@ -11,6 +11,7 @@ if str(AGENT_DIR) not in sys.path:
 
 from ai_friend_response import generate_response as generate_jiho_response
 from ai_friend_response import split_double_text
+from domain.agents.jiho import JIHO_DEFINITION
 
 
 class AIFriendResponseGenerator:
@@ -47,11 +48,12 @@ class AIFriendResponseGenerator:
         else:
             self._module.last_response_usage = None
 
+        model_config = JIHO_DEFINITION.runtime.response_model
         stream = self._module.openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=model_config.model,
             messages=[{"role": "system", "content": prompt}],
-            temperature=0.8,
-            max_tokens=300,
+            temperature=model_config.temperature,
+            max_tokens=model_config.max_tokens,
             stream=True,
             stream_options={"include_usage": True},
         )

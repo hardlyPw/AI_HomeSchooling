@@ -13,8 +13,7 @@ from typing import Iterator
 
 from domain.agents.conversation import (
     AvailabilityMode,
-    ConversationAgentProfile,
-    ConversationBehaviorConfig,
+    ConversationAgentDefinition,
 )
 from domain.agents.friend_runtime import FriendRuntime
 from domain.agents.friend_events import (
@@ -47,18 +46,18 @@ class FriendService:
     def __init__(
         self,
         runtime: FriendRuntime,
-        profile: ConversationAgentProfile,
-        behavior: ConversationBehaviorConfig,
+        definition: ConversationAgentDefinition,
     ) -> None:
         """서버 시작 시 Jiho의 대화/호감도/쿨다운 상태를 깨끗하게 초기화한다."""
         self._runtime = runtime
-        self._profile = profile
+        self._definition = definition
+        self._profile = definition.profile
         self._runtime.reset_state(self._profile.initial_affinity)
         self._away_count = 0
         self._force_next_cooldown = False
         self._force_next_double_text = False
         self._cooldown_skip_event = threading.Event()
-        self._behavior = behavior
+        self._behavior = definition.behavior
         self._timing_policy = ConversationTimingPolicy(self._behavior)
         self._affinity_policy = AffinityPolicy(self._behavior)
 
@@ -170,7 +169,12 @@ class FriendService:
                 time.sleep(away.wait_seconds)
 
         # Long-term RAG retrieval (top_k uses CURRENT affinity, before LLM delta)
-        top_k = 1 if self._runtime.affinity <= 40 else 5
+        memory_config = self._definition.runtime.memory
+        top_k = (
+            memory_config.low_affinity_top_k
+            if self._runtime.affinity <= memory_config.top_k_affinity_cutoff
+            else memory_config.normal_top_k
+        )
         if self._runtime.uses_long_term_memory:
             long_term = self._runtime.get_long_term_memory(user_message, top_k=top_k)
         else:

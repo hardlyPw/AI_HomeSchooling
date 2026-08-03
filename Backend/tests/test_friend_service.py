@@ -11,8 +11,9 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from services.friend_service import FriendService
 from domain.agents.conversation import ConversationBehaviorConfig
+from domain.agents.definition import AgentDefinition
 from domain.agents.conversation_policy import ConversationTimingPolicy
-from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
+from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_DEFINITION, JIHO_PROFILE
 
 
 class FakeFriendRuntime:
@@ -104,8 +105,7 @@ class FriendServiceTest(unittest.TestCase):
         runtime = FakeFriendRuntime()
         service = FriendService(
             runtime=runtime,
-            profile=JIHO_PROFILE,
-            behavior=JIHO_BEHAVIOR,
+            definition=JIHO_DEFINITION,
         )
         service._timing_policy = ConversationTimingPolicy(
             ConversationBehaviorConfig(
@@ -131,8 +131,12 @@ class FriendServiceTest(unittest.TestCase):
         )
         service = FriendService(
             runtime=runtime,
-            profile=profile,
-            behavior=JIHO_BEHAVIOR,
+            definition=AgentDefinition(
+                agent_type=JIHO_DEFINITION.agent_type,
+                profile=profile,
+                behavior=JIHO_BEHAVIOR,
+                runtime=JIHO_DEFINITION.runtime,
+            ),
         )
 
         runtime.affinity = 29
