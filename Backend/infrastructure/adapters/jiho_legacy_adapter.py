@@ -4,11 +4,10 @@ from typing import Iterator
 
 from domain.agents.conversation import (
     BaseDebuggableConversationAgent,
-    ConversationAgentProfile,
+    ConversationAgentDefinition,
     ConversationAgentState,
-    ConversationBehaviorConfig,
 )
-from domain.agents.jiho import JIHO_BEHAVIOR, JIHO_PROFILE
+from domain.agents.jiho import JIHO_DEFINITION
 from domain.agents.friend_runtime import FriendRuntime
 from domain.agents.friend_events import FriendStreamEvent
 from infrastructure.adapters.ai_friend_runtime import AIFriendRuntime
@@ -18,20 +17,20 @@ from services.friend_service import FriendService
 class JihoLegacyAdapter(BaseDebuggableConversationAgent):
     """Adapter around the existing AI_Friend-backed FriendService."""
 
-    def __init__(self, runtime: FriendRuntime | None = None) -> None:
+    def __init__(
+        self,
+        runtime: FriendRuntime | None = None,
+        definition: ConversationAgentDefinition = JIHO_DEFINITION,
+    ) -> None:
+        self._definition = definition
         self._service = FriendService(
             runtime=runtime or AIFriendRuntime(),
-            profile=JIHO_PROFILE,
-            behavior=JIHO_BEHAVIOR,
+            definition=self._definition,
         )
 
     @property
-    def profile(self) -> ConversationAgentProfile:
-        return JIHO_PROFILE
-
-    @property
-    def behavior(self) -> ConversationBehaviorConfig:
-        return JIHO_BEHAVIOR
+    def definition(self) -> ConversationAgentDefinition:
+        return self._definition
 
     def get_state(self) -> ConversationAgentState:
         return ConversationAgentState(

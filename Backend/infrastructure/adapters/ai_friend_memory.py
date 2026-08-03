@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import ModuleType
 
+from domain.agents.jiho import JIHO_DEFINITION
+
 
 class AIFriendMemoryRepository:
     """Memory gateway for the legacy AI_Friend module."""
@@ -18,7 +20,10 @@ class AIFriendMemoryRepository:
         return self._module.USE_LONG_TERM_MEMORY
 
     def reset_demo_long_term_memory(self) -> None:
-        self._module.supabase.rpc("reset_friend_memories_v2_to_demo_seed", {}).execute()
+        self._module.supabase.rpc(
+            JIHO_DEFINITION.runtime.memory.reset_rpc_name,
+            {},
+        ).execute()
 
     def get_long_term_memory(self, query_text: str, top_k: int) -> list[dict]:
         if self._repository is not None:

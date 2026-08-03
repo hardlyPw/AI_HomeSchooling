@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from pathlib import Path
 import random
+import sys
 import time
 from types import ModuleType
+
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1] / "Backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from domain.agents.jiho import JIHO_DEFINITION
 
 
 _conversation_log_path: str | None = None
@@ -57,7 +66,12 @@ def main(af_module: ModuleType | None = None) -> None:
         print("AI: ...", flush=True)
 
         start_total = time.time()
-        top_k = 1 if af.runtime_state.affinity <= 40 else 5
+        memory_config = JIHO_DEFINITION.runtime.memory
+        top_k = (
+            memory_config.low_affinity_top_k
+            if af.runtime_state.affinity <= memory_config.top_k_affinity_cutoff
+            else memory_config.normal_top_k
+        )
 
         if af.USE_LONG_TERM_MEMORY:
             long_term = af.get_long_term_memory(user_input, top_k)

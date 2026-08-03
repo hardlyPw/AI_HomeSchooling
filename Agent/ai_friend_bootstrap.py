@@ -4,6 +4,7 @@ import atexit
 from dataclasses import dataclass
 from functools import lru_cache
 import os
+from pathlib import Path
 import sys
 from typing import Any
 import weakref
@@ -14,9 +15,16 @@ from ai_friend_state import JihoRuntimeState
 from jiho_memory_repository import JihoMemoryRepository
 
 
-MEMORY_TABLE = "friend_memories_v2"
-MEMORY_MATCH_RPC = "match_friend_memories_v2"
-SESSION_TIMEOUT_SECONDS = 5 * 60
+_BACKEND_DIR = Path(__file__).resolve().parents[1] / "Backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from domain.agents.jiho import JIHO_DEFINITION  # noqa: E402
+
+
+MEMORY_TABLE = JIHO_DEFINITION.runtime.memory.table_name
+MEMORY_MATCH_RPC = JIHO_DEFINITION.runtime.memory.match_rpc_name
+SESSION_TIMEOUT_SECONDS = JIHO_DEFINITION.runtime.memory.session_timeout_seconds
 
 
 @dataclass(frozen=True)
@@ -73,7 +81,7 @@ def load_ai_friend_dependencies() -> AIFriendDependencies:
         raise ValueError("OPENAI_API_KEY must be configured in .env")
 
     print("Loading embedding model...")
-    embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    embedding_model = SentenceTransformer(JIHO_DEFINITION.runtime.memory.embedding_model)
     print("Embedding model loaded.")
 
     return AIFriendDependencies(
@@ -100,6 +108,7 @@ def create_ai_friend_runtime_context(
         memory_match_rpc=MEMORY_MATCH_RPC,
         session_timeout_seconds=SESSION_TIMEOUT_SECONDS,
         uses_long_term_memory=lambda: uses_long_term_memory,
+        extraction_model=JIHO_DEFINITION.runtime.memory.extraction_model,
     )
     _memory_repositories.add(repository)
     return AIFriendRuntimeContext(

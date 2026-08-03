@@ -12,6 +12,7 @@ if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
 from jiho_memory_repository import JihoMemoryRepository
+from domain.agents.conversation import ModelInvocationConfig
 
 
 class FakeVector:
@@ -97,6 +98,11 @@ class JihoMemoryRepositoryTest(unittest.TestCase):
             memory_match_rpc="match_memories",
             session_timeout_seconds=9999,
             uses_long_term_memory=lambda: enabled,
+            extraction_model=ModelInvocationConfig(
+                model="memory-model",
+                temperature=0,
+                max_tokens=1200,
+            ),
         )
         return repository, supabase
 
