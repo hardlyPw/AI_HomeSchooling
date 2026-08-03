@@ -32,11 +32,11 @@ export default function HomeView({ vm }: HomeViewProps) {
             </span>
           </button>
 
-          <button className="home-action disabled" disabled>
+          <button className="home-action" onClick={vm.openCreateAgent}>
             <Plus size={22} />
             <span>
               <strong>Add Agent</strong>
-              <small>Coming after agent abstraction</small>
+              <small>Design a new conversation friend</small>
             </span>
           </button>
         </div>
@@ -49,6 +49,8 @@ export default function HomeView({ vm }: HomeViewProps) {
         </div>
 
         <div className="home-agent-list">
+          {vm.isLoadingAgents && <div className="home-agent-status">Refreshing Agents...</div>}
+          {vm.agentLoadError && <div className="home-agent-status error">{vm.agentLoadError}</div>}
           {vm.agents.map(agent => (
             <button
               key={agent.id}

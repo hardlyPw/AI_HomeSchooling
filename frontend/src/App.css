@@ -172,6 +172,196 @@ textarea {
   object-fit: cover;
 }
 
+.home-agent-status {
+  padding: 8px 4px;
+  color: #94a3b8;
+  font-size: 0.76rem;
+}
+
+.home-agent-status.error {
+  color: #fca5a5;
+}
+
+.agent-create-layout {
+  overflow-y: auto;
+  background: #eef2f6;
+  color: #172033;
+}
+
+.agent-create-view {
+  width: min(920px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 48px;
+}
+
+.agent-create-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 0 20px;
+  border-bottom: 1px solid #cfd7e3;
+}
+
+.agent-create-header button {
+  display: inline-grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #c8d1de;
+  border-radius: 50%;
+  background: #fff;
+  color: #263247;
+  cursor: pointer;
+}
+
+.agent-create-header span {
+  color: #52706b;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.agent-create-header h1 {
+  margin: 3px 0 0;
+  color: #111827;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.agent-create-form {
+  display: grid;
+  gap: 0;
+  background: #fff;
+  border: 1px solid #d7dee8;
+  border-radius: 8px;
+  margin-top: 20px;
+  overflow: hidden;
+}
+
+.agent-create-section {
+  display: grid;
+  gap: 15px;
+  padding: 22px 24px;
+  border-bottom: 1px solid #e3e8ef;
+}
+
+.agent-create-section h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.agent-create-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.agent-create-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #344054;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.agent-create-field > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-create-field > span strong {
+  color: #667085;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.agent-create-field input,
+.agent-create-field select,
+.agent-create-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  font-weight: 500;
+  outline: none;
+}
+
+.agent-create-field input,
+.agent-create-field select {
+  height: 42px;
+  padding: 0 11px;
+}
+
+.agent-create-field textarea {
+  min-height: 92px;
+  padding: 10px 11px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.agent-create-field input:focus,
+.agent-create-field select:focus,
+.agent-create-field textarea:focus {
+  border-color: #278477;
+  box-shadow: 0 0 0 3px rgba(39, 132, 119, 0.14);
+}
+
+.agent-create-error {
+  padding: 12px 24px;
+  border-bottom: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.8rem;
+}
+
+.agent-create-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  background: #f8fafc;
+}
+
+.agent-create-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 110px;
+  height: 40px;
+  padding: 0 15px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.agent-create-footer .secondary {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #344054;
+}
+
+.agent-create-footer .primary {
+  border: 1px solid #166d62;
+  background: #166d62;
+  color: #fff;
+}
+
+.agent-create-footer button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
 @media (max-width: 760px) {
   .home-layout {
     place-items: stretch;
@@ -182,6 +372,23 @@ textarea {
     width: auto;
     grid-template-columns: 1fr;
     padding: 20px;
+  }
+
+  .agent-create-view {
+    width: auto;
+    padding: 18px 16px 32px;
+  }
+
+  .agent-create-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-create-section {
+    padding: 18px 16px;
+  }
+
+  .agent-create-footer {
+    padding: 14px 16px;
   }
 }
 
@@ -1175,6 +1382,25 @@ textarea {
 .friend-portrait.active {
   opacity: 1;
   transform: scale(1);
+}
+
+.friend-portrait-placeholder {
+  display: grid;
+  width: min(72%, 360px);
+  aspect-ratio: 1;
+  place-items: center;
+  align-content: center;
+  gap: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.34);
+  color: #263247;
+  box-shadow: 0 22px 38px rgba(0, 0, 0, 0.16);
+}
+
+.friend-portrait-placeholder strong {
+  font-size: 2rem;
+  letter-spacing: 0;
 }
 
 .friend-affinity-num {

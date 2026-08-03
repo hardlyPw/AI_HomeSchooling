@@ -14,6 +14,7 @@ from api.v1.autorater import (
     preload_first_example_background,
 )
 from api.v1.friend import router as friend_router
+from api.v1.agents import router as agents_router
 
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -43,7 +44,11 @@ app = FastAPI(title="Chatbot Service Mock API", lifespan=lifespan)
 # CORS 설정: React(8080)에서 오는 요청 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080"],
+    allow_origins=[
+        "http://localhost:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +59,7 @@ app.include_router(chat_router, prefix="/api/v1", tags=["Chat"])
 app.include_router(lesson_router, prefix="/api/v1/lesson", tags=["Lesson"])
 app.include_router(autorater_router, prefix="/api/v1/autorater", tags=["Autorater"])
 app.include_router(friend_router, prefix="/api/v1/friend", tags=["Friend"])
+app.include_router(agents_router, prefix="/api/v1/agents", tags=["Agents"])
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR, check_dir=False), name="assets")
 
 @app.get("/")

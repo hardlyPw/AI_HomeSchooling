@@ -5,6 +5,7 @@ import AppShell from './app/AppShell'
 import type { AppMode } from './types'
 import { useHomeViewModel } from './views/HomeView/useHomeViewModel'
 import { useLearningViewModel } from './views/LearningView/useLearningViewModel'
+import { useAgentCreateViewModel } from './views/AgentCreateView/useAgentCreateViewModel'
 import './App.css'
 
 function App() {
@@ -22,14 +23,25 @@ function App() {
       setSelectedAgentId(agentId)
       setAppMode('agent-chat')
     },
+    onOpenCreateAgent: () => setAppMode('agent-create'),
     onOpenLesson: learningVm.openLecture,
     onOpenProblemSolving: learningVm.enterAutoraterMode,
+  })
+
+  const agentCreateVm = useAgentCreateViewModel({
+    onCancel: () => setAppMode('home'),
+    onCreated: agent => {
+      setSelectedAgentId(agent.id)
+      void homeVm.refreshAgents()
+      setAppMode('agent-chat')
+    },
   })
 
   return (
     <AppShell
       currentView={appMode}
       homeVm={homeVm}
+      agentCreateVm={agentCreateVm}
       selectedAgentId={selectedAgentId}
       selectedLectureId={learningVm.selectedLectureId}
       lectureThumbnails={learningVm.lectureThumbnails}
