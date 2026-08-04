@@ -14,3 +14,6 @@ class ConversationAgentRepository(Protocol):
 
     def save(self, definition: ConversationAgentDefinition) -> None:
         raise NotImplementedError
+
+    def delete(self, agent_id: str) -> bool:
+        raise NotImplementedError

@@ -16,5 +16,6 @@ export interface AgentProfile {
     cooldownEnd: string
   }
   capabilities: AgentCapability[]
+  isBuiltin?: boolean
   avatarByMood?: Record<string, string>
 }

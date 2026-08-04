@@ -1,5 +1,6 @@
 import os
 import time
+from functools import lru_cache
 from dotenv import load_dotenv
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -9,7 +10,11 @@ from openai import OpenAI
 load_dotenv()
 
 router = APIRouter()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+@lru_cache(maxsize=1)
+def _get_openai_client() -> OpenAI:
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class TTSRequest(BaseModel):
@@ -19,7 +24,7 @@ class TTSRequest(BaseModel):
 @router.post("/tts")
 def text_to_speech(request: TTSRequest):
     t0 = time.perf_counter()
-    response = openai_client.audio.speech.create(
+    response = _get_openai_client().audio.speech.create(
         model="tts-1",
         voice="shimmer",
         input=request.text,

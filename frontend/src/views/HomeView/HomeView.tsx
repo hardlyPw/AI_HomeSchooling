@@ -1,4 +1,4 @@
-import { BookOpen, Bot, BrainCircuit, MessageCircle, Plus } from 'lucide-react'
+import { BookOpen, Bot, BrainCircuit, MessageCircle, Plus, Trash2, X } from 'lucide-react'
 import type { HomeViewModel } from './useHomeViewModel'
 
 interface HomeViewProps {
@@ -52,23 +52,55 @@ export default function HomeView({ vm }: HomeViewProps) {
           {vm.isLoadingAgents && <div className="home-agent-status">Refreshing Agents...</div>}
           {vm.agentLoadError && <div className="home-agent-status error">{vm.agentLoadError}</div>}
           {vm.agents.map(agent => (
-            <button
-              key={agent.id}
-              className="home-agent-row"
-              onClick={() => vm.openAgent(agent.id)}
-            >
-              <span className="home-agent-avatar">
-                {agent.avatarByMood?.happy ? (
-                  <img src={agent.avatarByMood.happy} alt="" />
-                ) : (
-                  <MessageCircle size={20} />
+            <div key={agent.id} className="home-agent-item">
+              <div className="home-agent-item-main">
+                <button
+                  className="home-agent-row"
+                  onClick={() => vm.openAgent(agent.id)}
+                >
+                  <span className="home-agent-avatar">
+                    {agent.avatarByMood?.happy ? (
+                      <img src={agent.avatarByMood.happy} alt="" />
+                    ) : (
+                      <MessageCircle size={20} />
+                    )}
+                  </span>
+                  <span className="home-agent-copy">
+                    <strong>{agent.entryLabel}</strong>
+                    <small>{agent.description}</small>
+                  </span>
+                </button>
+                {!agent.isBuiltin && (
+                  <button
+                    className="home-agent-delete"
+                    onClick={() => vm.requestDeleteAgent(agent.id)}
+                    aria-label={`Delete ${agent.name}`}
+                    title={`Delete ${agent.name}`}
+                  >
+                    <Trash2 size={17} />
+                  </button>
                 )}
-              </span>
-              <span className="home-agent-copy">
-                <strong>{agent.entryLabel}</strong>
-                <small>{agent.description}</small>
-              </span>
-            </button>
+              </div>
+              {vm.pendingDeleteId === agent.id && (
+                <div className="home-agent-delete-confirm">
+                  <span>Delete {agent.name}?</span>
+                  <button
+                    onClick={vm.cancelDeleteAgent}
+                    aria-label="Cancel deletion"
+                    title="Cancel deletion"
+                  >
+                    <X size={16} />
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => void vm.confirmDeleteAgent()}
+                    disabled={vm.deletingAgentId === agent.id}
+                  >
+                    {vm.deletingAgentId === agent.id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </section>

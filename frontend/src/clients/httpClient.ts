@@ -20,6 +20,11 @@ export class HttpClient {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     return response.json() as Promise<TResponse>
   }
+
+  async delete(url: string, headers?: HeadersInit): Promise<void> {
+    const response = await fetch(url, { method: 'DELETE', headers })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  }
 }
 
 export const httpClient = new HttpClient()

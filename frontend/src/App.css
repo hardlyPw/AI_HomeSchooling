@@ -105,6 +105,78 @@ textarea {
   cursor: pointer;
 }
 
+.home-agent-item {
+  display: grid;
+  gap: 7px;
+}
+
+.home-agent-item-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  gap: 7px;
+}
+
+.home-agent-delete {
+  display: grid;
+  width: 36px;
+  min-height: 70px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.home-agent-delete:hover {
+  border-color: rgba(248, 113, 113, 0.48);
+  background: rgba(127, 29, 29, 0.28);
+  color: #fecaca;
+}
+
+.home-agent-delete-confirm {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 7px 9px;
+  border-left: 2px solid #ef4444;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  font-size: 0.74rem;
+}
+
+.home-agent-delete-confirm span {
+  margin-right: auto;
+}
+
+.home-agent-delete-confirm button {
+  display: inline-grid;
+  min-width: 30px;
+  height: 28px;
+  place-items: center;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  background: transparent;
+  color: #f8fafc;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.home-agent-delete-confirm button.danger {
+  border-color: #ef4444;
+  background: #b91c1c;
+}
+
+.home-agent-delete-confirm button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .home-action:hover,
 .home-agent-row:hover {
   background: rgba(255, 255, 255, 0.1);

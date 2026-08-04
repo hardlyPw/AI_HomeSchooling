@@ -23,6 +23,7 @@ class AgentSummary(BaseModel):
     description: str
     initial_affinity: int
     capabilities: list[str]
+    is_builtin: bool = False
 
 
 class AgentListResponse(BaseModel):

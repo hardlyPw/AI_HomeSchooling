@@ -9,6 +9,7 @@ export interface AgentSummaryResponse {
   description: string
   initial_affinity: number
   capabilities: string[]
+  is_builtin: boolean
 }
 
 interface AgentListResponse {
@@ -55,6 +56,7 @@ const toProfile = (agent: AgentSummaryResponse): AgentProfile => {
         }
       : undefined,
     capabilities: mapCapabilities(agent.capabilities),
+    isBuiltin: agent.is_builtin,
   }
 }
 
@@ -72,6 +74,10 @@ export class AgentCatalogClient {
       request,
     )
     return toProfile(response)
+  }
+
+  deleteAgent(agentId: string): Promise<void> {
+    return httpClient.delete(`${BACKEND_BASE_URL}/api/v1/agents/${agentId}`)
   }
 }
 

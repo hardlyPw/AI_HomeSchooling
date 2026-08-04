@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
-import { AUTORATER_API_URL } from '../../../constants'
+import { autoraterClient } from '../../../clients/autorater/AutoraterClient'
 import type { Message } from '../../../types'
 import {
-  fetchExampleImagePaths,
   formatIsabellaText,
   loadImageAsDataUrl,
-  preloadFirstAutoraterExample,
 } from '../../../utils'
 
 interface UseAutoraterViewModelParams {
@@ -30,7 +28,7 @@ export const useAutoraterViewModel = ({
   const [exampleImageError, setExampleImageError] = useState('')
 
   useEffect(() => {
-    preloadFirstAutoraterExample().catch(error => {
+    autoraterClient.preloadFirst().catch(error => {
       console.error('Error preloading first autorater example:', error)
     })
   }, [])
@@ -38,8 +36,8 @@ export const useAutoraterViewModel = ({
   useEffect(() => {
     let cancelled = false
 
-    fetchExampleImagePaths()
-      .then(images => {
+    autoraterClient.getExamples()
+      .then(({ images }) => {
         if (cancelled) return
         setExampleImagePaths(images)
         setCurrentExampleImage(prev => prev || images[0] || '')
@@ -69,16 +67,7 @@ export const useAutoraterViewModel = ({
     setExampleMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
 
     try {
-      const response = await fetch(`${AUTORATER_API_URL}/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_b64: imageB64 }),
-      })
-      if (!response.ok) {
-        const detail = await response.text().catch(() => response.statusText)
-        throw new Error(`HTTP ${response.status}: ${detail}`)
-      }
-      const data = await response.json()
+      const data = await autoraterClient.start(imageB64)
       setExampleMessages(prev => prev.map(m => (
         m.id === msgId ? { ...m, text: formatIsabellaText(data.opener, data.mode) } : m
       )))
@@ -108,7 +97,7 @@ export const useAutoraterViewModel = ({
     if (imagePaths.length === 0) {
       setAutoraterLoading(true)
       try {
-        imagePaths = await fetchExampleImagePaths()
+        imagePaths = (await autoraterClient.getExamples()).images
         setExampleImagePaths(imagePaths)
         setExampleImageError(imagePaths.length > 0 ? '' : 'No example images were found.')
       } catch (error) {
@@ -154,19 +143,14 @@ export const useAutoraterViewModel = ({
     setAutoraterLoading(true)
 
     try {
-      const response = await fetch(`${AUTORATER_API_URL}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: messageText }),
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const data = await response.json()
+      const data = await autoraterClient.chat(messageText)
 
       setExampleMessages(prev => [...prev, { role: 'assistant', text: formatIsabellaText(data.reply, data.mode) }])
       if (data.next_opener) {
+        const nextOpener = data.next_opener
         setExampleMessages(prev => [...prev, {
           role: 'assistant',
-          text: formatIsabellaText(data.next_opener, data.next_mode),
+          text: formatIsabellaText(nextOpener, data.next_mode),
         }])
       }
       if (data.is_done) {

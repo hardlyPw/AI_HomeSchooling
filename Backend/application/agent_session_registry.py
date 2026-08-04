@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import threading
 
+from application.expiring_service_cache import ExpiringServiceCache
 from application.services.agent_catalog_service import AgentNotFoundError
 from application.services.friend_chat_service import FriendChatService
 from domain.agents.conversation import ConversationAgentDefinition
@@ -22,11 +22,22 @@ class AgentSessionRegistry:
         self,
         repository: ConversationAgentRepository,
         service_factory: AgentServiceFactory,
+        *,
+        ttl_seconds: float = 3600,
+        max_sessions: int = 256,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self._repository = repository
         self._service_factory = service_factory
-        self._services: dict[tuple[str, str, str], FriendChatService] = {}
-        self._lock = threading.RLock()
+        cache_options = {
+            "ttl_seconds": ttl_seconds,
+            "max_entries": max_sessions,
+        }
+        if clock is not None:
+            cache_options["clock"] = clock
+        self._services = ExpiringServiceCache[tuple[str, str, str], FriendChatService](
+            **cache_options,
+        )
 
     def get(
         self,
@@ -41,12 +52,14 @@ class AgentSessionRegistry:
         normalized_user = self._normalize(user_id, fallback="anonymous")
         normalized_session = self._normalize(session_id, fallback="default")
         key = (normalized_user, agent_id, normalized_session)
-        with self._lock:
-            service = self._services.get(key)
-            if service is None:
-                service = self._service_factory(definition, normalized_user)
-                self._services[key] = service
-            return service
+        return self._services.get_or_create(
+            key,
+            lambda: self._service_factory(definition, normalized_user),
+        )
+
+    @property
+    def session_count(self) -> int:
+        return self._services.size
 
     @staticmethod
     def _normalize(value: str | None, *, fallback: str) -> str:
