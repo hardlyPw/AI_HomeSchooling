@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from domain.problem_solving.autorater import AutoraterChatResult, AutoraterStartResult
-from infrastructure.adapters.autorater_legacy_adapter import AutoraterLegacyAdapter
+from infrastructure.adapters.isabella_solver_agent import IsabellaSolverAgent
 from infrastructure.storage.temp_image_storage import TempImageStorage
 
 
@@ -17,7 +17,7 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 class AutoraterService:
     def __init__(
         self,
-        adapter: AutoraterLegacyAdapter,
+        adapter: IsabellaSolverAgent,
         storage: TempImageStorage,
         examples_dir: Path,
     ) -> None:
@@ -33,7 +33,7 @@ class AutoraterService:
         }
 
     def get_legacy_module(self):
-        return self._adapter.get_module()
+        return self._adapter.get_legacy_module()
 
     def debug_state(self) -> dict[str, Any]:
         with self._runtime_lock:

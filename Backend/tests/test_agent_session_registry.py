@@ -48,6 +48,23 @@ class AgentSessionRegistryTest(unittest.TestCase):
         with self.assertRaises(AgentNotFoundError):
             registry.get("missing", "session", "user")
 
+    def test_expired_session_is_recreated(self) -> None:
+        repository = InMemoryConversationAgentRepository((JIHO_DEFINITION,))
+        now = [0.0]
+        registry = AgentSessionRegistry(
+            repository,
+            lambda definition, user_id: object(),
+            ttl_seconds=10,
+            clock=lambda: now[0],
+        )
+
+        first = registry.get("jiho", "session", "user")
+        now[0] = 11
+        recreated = registry.get("jiho", "session", "user")
+
+        self.assertIsNot(first, recreated)
+        self.assertEqual(registry.session_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { agentCatalogClient } from '../../clients/agents/AgentCatalogClient'
 import { LECTURES } from '../../constants'
-import { listAgentProfiles, upsertAgentProfiles } from '../../domain/agents/agentRegistry'
+import {
+  listAgentProfiles,
+  removeAgentProfile,
+  upsertAgentProfiles,
+} from '../../domain/agents/agentRegistry'
 import type { AgentProfile } from '../../domain/agents/AgentProfile'
 import type { Lecture } from '../../types'
 
@@ -16,12 +20,17 @@ export interface HomeViewModel {
   agents: AgentProfile[]
   isLoadingAgents: boolean
   agentLoadError: string
+  deletingAgentId: string
+  pendingDeleteId: string
   primaryLecture: Lecture
   openAgent: (agentId: string) => void
   openCreateAgent: () => void
   refreshAgents: () => Promise<void>
   openLesson: () => void
   openProblemSolving: () => void
+  cancelDeleteAgent: () => void
+  confirmDeleteAgent: () => Promise<void>
+  requestDeleteAgent: (agentId: string) => void
 }
 
 export const useHomeViewModel = ({
@@ -33,6 +42,8 @@ export const useHomeViewModel = ({
   const [agents, setAgents] = useState<AgentProfile[]>(listAgentProfiles())
   const [isLoadingAgents, setIsLoadingAgents] = useState(true)
   const [agentLoadError, setAgentLoadError] = useState('')
+  const [pendingDeleteId, setPendingDeleteId] = useState('')
+  const [deletingAgentId, setDeletingAgentId] = useState('')
 
   const refreshAgents = useCallback(async () => {
     setIsLoadingAgents(true)
@@ -70,15 +81,37 @@ export const useHomeViewModel = ({
     }
   }, [])
 
+  const confirmDeleteAgent = async () => {
+    if (!pendingDeleteId || deletingAgentId) return
+    const agentId = pendingDeleteId
+    setDeletingAgentId(agentId)
+    setAgentLoadError('')
+    try {
+      await agentCatalogClient.deleteAgent(agentId)
+      removeAgentProfile(agentId)
+      setAgents(listAgentProfiles())
+      setPendingDeleteId('')
+    } catch {
+      setAgentLoadError('Could not delete this Agent.')
+    } finally {
+      setDeletingAgentId('')
+    }
+  }
+
   return {
     agents,
     isLoadingAgents,
     agentLoadError,
+    deletingAgentId,
+    pendingDeleteId,
     primaryLecture: LECTURES[0],
     openAgent: onOpenAgent,
     openCreateAgent: onOpenCreateAgent,
     refreshAgents,
     openLesson: () => onOpenLesson(LECTURES[0].id),
     openProblemSolving: onOpenProblemSolving,
+    cancelDeleteAgent: () => setPendingDeleteId(''),
+    confirmDeleteAgent,
+    requestDeleteAgent: setPendingDeleteId,
   }
 }

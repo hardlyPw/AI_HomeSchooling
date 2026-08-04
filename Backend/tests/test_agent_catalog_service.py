@@ -13,6 +13,7 @@ if str(BACKEND_ROOT) not in sys.path:
 from application.services.agent_catalog_service import (
     AgentCatalogService,
     AgentNotFoundError,
+    ProtectedAgentError,
 )
 from domain.agents.conversation_creation import ConversationAgentQuestionnaire
 from domain.agents.jiho import JIHO_DEFINITION
@@ -61,6 +62,22 @@ class AgentCatalogServiceTest(unittest.TestCase):
 
         with self.assertRaises(AgentNotFoundError):
             service.get_agent("missing")
+
+    def test_deletes_generated_agent_but_protects_built_in_agent(self) -> None:
+        repository = InMemoryConversationAgentRepository((JIHO_DEFINITION,))
+        service = AgentCatalogService(repository, FakeCreationService())
+        service.create_agent(ConversationAgentQuestionnaire(
+            requested_name="Mina",
+            relationship="classmate",
+            personality="calm",
+            speech_style="short",
+            interests="drawing",
+        ))
+
+        service.delete_agent("mina")
+        self.assertIsNone(repository.get("mina"))
+        with self.assertRaises(ProtectedAgentError):
+            service.delete_agent("jiho")
 
 
 if __name__ == "__main__":

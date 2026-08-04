@@ -29,3 +29,7 @@ class InMemoryConversationAgentRepository:
     def save(self, definition: ConversationAgentDefinition) -> None:
         with self._lock:
             self._definitions[definition.profile.agent_id] = definition
+
+    def delete(self, agent_id: str) -> bool:
+        with self._lock:
+            return self._definitions.pop(agent_id, None) is not None

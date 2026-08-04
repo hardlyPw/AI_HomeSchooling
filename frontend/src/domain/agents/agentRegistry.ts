@@ -18,6 +18,7 @@ export const agentRegistry: Record<string, AgentProfile> = {
       cooldownEnd: `${BACKEND_BASE_URL}/api/v1/agents/jiho/debug/cooldown-end`,
     },
     capabilities: ['free-chat', 'affinity', 'debug-telemetry'],
+    isBuiltin: true,
     avatarByMood: {
       joy: '/assets/jiho/jiho_joy.png',
       happy: '/assets/jiho/jiho_happy.png',
@@ -41,4 +42,9 @@ export const upsertAgentProfiles = (profiles: AgentProfile[]) => {
       avatarByMood: profile.avatarByMood ?? existing?.avatarByMood,
     }
   })
+}
+
+export const removeAgentProfile = (agentId: string) => {
+  if (agentRegistry[agentId]?.isBuiltin) return
+  delete agentRegistry[agentId]
 }

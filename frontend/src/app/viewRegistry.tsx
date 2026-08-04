@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import FriendView from '../FriendView'
+import AgentChatView from '../views/AgentChatView/AgentChatView'
 import PlaylistView from '../components/PlaylistView'
 import HomeView from '../views/HomeView/HomeView'
 import type { AppMode } from '../types'
@@ -35,7 +35,7 @@ export const viewRegistry: Record<AppMode, ViewRenderer> = {
   ),
   'agent-chat': ({ selectedAgentId, openHome }) => (
     <div className="main-layout">
-      <FriendView agentId={selectedAgentId} onExit={openHome} />
+      <AgentChatView key={selectedAgentId} agentId={selectedAgentId} onExit={openHome} />
     </div>
   ),
   playlist: ({ selectedLectureId, lectureThumbnails, openLecture }) => (
