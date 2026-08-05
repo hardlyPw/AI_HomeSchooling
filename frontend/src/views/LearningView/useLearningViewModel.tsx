@@ -11,6 +11,8 @@ import PdfPanel from '../../components/PdfPanel'
 import QuickActions from '../../components/QuickActions'
 import StudyChatPanel from '../../components/StudyChatPanel'
 import { LECTURES } from '../../constants'
+import PracticeIntroView from './PracticeIntroView'
+import PracticeSummaryView from './PracticeSummaryView'
 import { useAutoraterViewModel } from './hooks/useAutoraterViewModel'
 import { useLectureViewModel } from './hooks/useLectureViewModel'
 import { useLessonChatViewModel } from './hooks/useLessonChatViewModel'
@@ -59,10 +61,9 @@ export const useLearningViewModel = ({
       pdfVm.clearPendingPdfSelection()
       pdfVm.setPendingFigureSelection(null)
     },
-    returnHome: () => {
+    closeWorkspace: () => {
       setShowChat(false)
       setShowPdf(false)
-      navigateHome()
     },
   })
 
@@ -125,7 +126,15 @@ export const useLearningViewModel = ({
     lectureVm.pause()
     lectureVm.setLessonState('paused')
     navigateLesson()
-    void autoraterVm.startExampleSession(0, true)
+    autoraterVm.preparePractice()
+  }
+
+  const returnToLesson = () => {
+    autoraterVm.resetRuntime()
+    setShowChat(false)
+    setShowPdf(false)
+    setHasOpenedPdf(false)
+    navigateLesson()
   }
 
   const toggleChat = () => {
@@ -169,7 +178,7 @@ export const useLearningViewModel = ({
     void pdfVm.handleChatPaste(e)
   }
 
-  const renderLessonView = () => (
+  const renderLessonWorkspace = () => (
     <div className={`main-layout${autoraterVm.autoraterMode ? ' autorater-screen' : ''}`}>
       <LessonStage
         selectedLecture={lectureVm.selectedLecture}
@@ -214,11 +223,19 @@ export const useLearningViewModel = ({
           pastedImageSelections={pdfVm.pastedImageSelections}
           currentExampleIndex={autoraterVm.currentExampleIndex}
           currentExampleImage={autoraterVm.currentExampleImage}
+          currentProblemTotal={autoraterVm.currentProblemTotal}
+          totalExamples={autoraterVm.totalExamples}
+          completedExamples={autoraterVm.completedExamples}
+          exampleComplete={autoraterVm.practicePhase === 'example-complete'}
+          isLastExample={autoraterVm.isLastExample}
           exampleImageError={autoraterVm.exampleImageError}
+          practiceError={autoraterVm.practiceError}
           scrollRef={scrollRef}
           chatInputRef={chatInputRef}
           onClose={() => setShowChat(false)}
-          onEndExampleSession={autoraterVm.endExampleSession}
+          onContinuePractice={() => void autoraterVm.continuePractice()}
+          onEndPractice={returnToLesson}
+          onRetryExample={() => void autoraterVm.retryCurrentExample()}
           onExampleImageLoad={() => autoraterVm.setExampleImageError('')}
           onExampleImageError={() => autoraterVm.setExampleImageError('This example image could not be displayed.')}
           onInputChange={handleChatInputChange}
@@ -241,6 +258,40 @@ export const useLearningViewModel = ({
       )}
     </div>
   )
+
+  const renderLessonView = () => {
+    if (autoraterVm.practicePhase === 'intro') {
+      return (
+        <PracticeIntroView
+          lecture={lectureVm.selectedLecture}
+          totalExamples={autoraterVm.totalExamples}
+          isLoading={autoraterVm.autoraterLoading}
+          error={autoraterVm.exampleImageError}
+          onStart={() => void autoraterVm.beginPractice()}
+          onRetry={() => void autoraterVm.loadExamples()}
+          onReturnLesson={returnToLesson}
+          onReturnHome={goHome}
+        />
+      )
+    }
+
+    if (autoraterVm.practicePhase === 'summary') {
+      return (
+        <PracticeSummaryView
+          lecture={lectureVm.selectedLecture}
+          completedExamples={autoraterVm.completedExamples}
+          totalExamples={autoraterVm.totalExamples}
+          userMessageCount={autoraterVm.userMessageCount}
+          elapsedSeconds={autoraterVm.elapsedSeconds}
+          onRestart={autoraterVm.preparePractice}
+          onReturnLesson={returnToLesson}
+          onReturnHome={goHome}
+        />
+      )
+    }
+
+    return renderLessonWorkspace()
+  }
 
   return {
     selectedLectureId: lectureVm.selectedLectureId,

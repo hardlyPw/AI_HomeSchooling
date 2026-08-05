@@ -1,5 +1,5 @@
-import type { ClipboardEvent, KeyboardEvent, RefObject } from 'react'
-import { X } from 'lucide-react'
+import { useState, type ClipboardEvent, type KeyboardEvent, type RefObject } from 'react'
+import { ArrowRight, RefreshCw, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
@@ -18,11 +18,19 @@ interface StudyChatPanelProps {
   pastedImageSelections: PastedImageSelection[]
   currentExampleIndex: number
   currentExampleImage: string
+  currentProblemTotal: number
+  totalExamples: number
+  completedExamples: number
+  exampleComplete: boolean
+  isLastExample: boolean
   exampleImageError: string
+  practiceError: string
   scrollRef: RefObject<HTMLDivElement | null>
   chatInputRef: RefObject<HTMLInputElement | null>
   onClose: () => void
-  onEndExampleSession: () => void
+  onContinuePractice: () => void
+  onEndPractice: () => void
+  onRetryExample: () => void
   onExampleImageLoad: () => void
   onExampleImageError: () => void
   onInputChange: (value: string) => void
@@ -45,11 +53,19 @@ export default function StudyChatPanel({
   pastedImageSelections,
   currentExampleIndex,
   currentExampleImage,
+  currentProblemTotal,
+  totalExamples,
+  completedExamples,
+  exampleComplete,
+  isLastExample,
   exampleImageError,
+  practiceError,
   scrollRef,
   chatInputRef,
   onClose,
-  onEndExampleSession,
+  onContinuePractice,
+  onEndPractice,
+  onRetryExample,
   onExampleImageLoad,
   onExampleImageError,
   onInputChange,
@@ -60,15 +76,19 @@ export default function StudyChatPanel({
   onRemoveFigureSelection,
   onRemovePastedImageSelection,
 }: StudyChatPanelProps) {
+  const [showEndConfirmation, setShowEndConfirmation] = useState(false)
   const hasContext = pdfSelections.length > 0 || figureSelections.length > 0 || pastedImageSelections.length > 0
+  const progressPercent = totalExamples > 0
+    ? Math.round((completedExamples / totalExamples) * 100)
+    : 0
 
   return (
     <div className={autoraterMode ? 'split-panel autorater-chat-panel' : 'floating-panel chat-panel'}>
       <div className="panel-header">
-        <span>{autoraterMode ? 'Solving Examples with Isabella' : 'Chat'}</span>
+        <span>{autoraterMode ? 'Practice with Isabella' : 'Chat'}</span>
         {autoraterMode ? (
-          <button className="panel-action" onClick={onEndExampleSession}>
-            End example session
+          <button className="panel-action" onClick={() => setShowEndConfirmation(true)}>
+            End practice
           </button>
         ) : (
           <button className="panel-close" onClick={onClose} aria-label="Close chat">
@@ -77,10 +97,35 @@ export default function StudyChatPanel({
         )}
       </div>
 
+      {autoraterMode && (
+        <div className="practice-progress-strip">
+          <div>
+            <strong>Example {Math.min(currentExampleIndex + 1, totalExamples || 1)} of {totalExamples || 1}</strong>
+            <span>{completedExamples} completed</span>
+          </div>
+          <div className="practice-progress-track" aria-label={`${progressPercent}% complete`}>
+            <span style={{ width: `${progressPercent}%` }} />
+          </div>
+        </div>
+      )}
+
+      {autoraterMode && showEndConfirmation && (
+        <div className="practice-end-confirm" role="alert">
+          <span>Return to the lesson? Current practice progress will be cleared.</span>
+          <div>
+            <button onClick={() => setShowEndConfirmation(false)}>Keep practicing</button>
+            <button className="danger" onClick={onEndPractice}>Return to lesson</button>
+          </div>
+        </div>
+      )}
+
       <div className="chat-view">
         {autoraterMode && (
           <div className="autorater-example-preview">
-            <div className="autorater-example-title">Example {currentExampleIndex + 1}</div>
+            <div className="autorater-example-title">
+              <span>Example {currentExampleIndex + 1}</span>
+              {currentProblemTotal > 0 && <span>{currentProblemTotal} questions</span>}
+            </div>
             {currentExampleImage ? (
               <img
                 src={currentExampleImage}
@@ -95,7 +140,11 @@ export default function StudyChatPanel({
             )}
             {exampleImageError && (
               <div className="autorater-example-error">
-                {exampleImageError}
+                <span>{exampleImageError}</span>
+                <button onClick={onRetryExample} disabled={autoraterLoading}>
+                  <RefreshCw size={15} />
+                  Retry
+                </button>
               </div>
             )}
           </div>
@@ -223,29 +272,49 @@ export default function StudyChatPanel({
           </div>
         )}
 
-        <div className="input-area">
-          <input
-            ref={chatInputRef}
-            value={activeInput}
-            onChange={e => onInputChange(e.target.value)}
-            onPaste={onInputPaste}
-            onKeyDown={onInputEnter}
-            placeholder={
-              autoraterMode && !autoraterStarted
-                ? 'Isabella is getting ready...'
-                : autoraterMode
-                ? 'Reply to Isabella...'
-                : 'Type a message...'
-            }
-            disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
-          />
-          <button
-            onClick={onSend}
-            disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
-          >
-            {autoraterLoading ? '...' : 'Send'}
-          </button>
-        </div>
+        {autoraterMode && exampleComplete ? (
+          <div className="practice-step-complete">
+            <span>Example {currentExampleIndex + 1} complete</span>
+            <button onClick={onContinuePractice}>
+              {isLastExample ? 'View summary' : 'Next example'}
+              <ArrowRight size={17} />
+            </button>
+          </div>
+        ) : (
+          <div className="input-area">
+            <input
+              ref={chatInputRef}
+              value={activeInput}
+              onChange={e => onInputChange(e.target.value)}
+              onPaste={onInputPaste}
+              onKeyDown={onInputEnter}
+              placeholder={
+                autoraterMode && !autoraterStarted
+                  ? 'Isabella is getting ready...'
+                  : autoraterMode
+                  ? 'Reply to Isabella...'
+                  : 'Type a message...'
+              }
+              disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
+            />
+            <button
+              onClick={onSend}
+              disabled={autoraterLoading || (autoraterMode && !autoraterStarted)}
+            >
+              {autoraterLoading ? '...' : 'Send'}
+            </button>
+          </div>
+        )}
+
+        {autoraterMode && practiceError && !autoraterLoading && (
+          <div className="practice-runtime-error" role="alert">
+            <span>{practiceError}</span>
+            <button onClick={onRetryExample}>
+              <RefreshCw size={15} />
+              Try again
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
