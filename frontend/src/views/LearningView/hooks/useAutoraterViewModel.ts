@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react'
 import { autoraterClient } from '../../../clients/autorater/AutoraterClient'
 import type { Message } from '../../../types'
-import {
-  formatIsabellaText,
-  loadImageAsDataUrl,
-} from '../../../utils'
+import { formatIsabellaText, loadImageAsDataUrl } from '../../../utils'
+
+export type PracticePhase = 'idle' | 'intro' | 'solving' | 'example-complete' | 'summary'
 
 interface UseAutoraterViewModelParams {
   clearChatContext: () => void
   openWorkspace: () => void
-  returnHome: () => void
+  closeWorkspace: () => void
 }
 
 export const useAutoraterViewModel = ({
   clearChatContext,
   openWorkspace,
-  returnHome,
+  closeWorkspace,
 }: UseAutoraterViewModelParams) => {
   const [autoraterMode, setAutoraterMode] = useState(false)
+  const [practicePhase, setPracticePhase] = useState<PracticePhase>('idle')
   const [autoraterStarted, setAutoraterStarted] = useState(false)
   const [autoraterLoading, setAutoraterLoading] = useState(false)
   const [exampleInput, setExampleInput] = useState('')
@@ -25,7 +25,16 @@ export const useAutoraterViewModel = ({
   const [exampleImagePaths, setExampleImagePaths] = useState<string[]>([])
   const [currentExampleIndex, setCurrentExampleIndex] = useState(0)
   const [currentExampleImage, setCurrentExampleImage] = useState('')
+  const [currentProblemTotal, setCurrentProblemTotal] = useState(0)
   const [exampleImageError, setExampleImageError] = useState('')
+  const [practiceError, setPracticeError] = useState('')
+  const [completedExamples, setCompletedExamples] = useState(0)
+  const [userMessageCount, setUserMessageCount] = useState(0)
+  const [sessionStartedAt, setSessionStartedAt] = useState<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+
+  const totalExamples = exampleImagePaths.length
+  const isLastExample = totalExamples > 0 && currentExampleIndex === totalExamples - 1
 
   useEffect(() => {
     autoraterClient.preloadFirst().catch(error => {
@@ -33,14 +42,34 @@ export const useAutoraterViewModel = ({
     })
   }, [])
 
+  const loadExamples = async () => {
+    setAutoraterLoading(true)
+    setExampleImageError('')
+    try {
+      const { images } = await autoraterClient.getExamples()
+      setExampleImagePaths(images)
+      setCurrentExampleImage(images[0] || '')
+      if (images.length === 0) {
+        setExampleImageError('No example images were found.')
+      }
+      return images
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Failed to load example images:', error)
+      setExampleImageError(`Failed to load examples: ${message}`)
+      return []
+    } finally {
+      setAutoraterLoading(false)
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
-
     autoraterClient.getExamples()
       .then(({ images }) => {
         if (cancelled) return
         setExampleImagePaths(images)
-        setCurrentExampleImage(prev => prev || images[0] || '')
+        setCurrentExampleImage(images[0] || '')
         setExampleImageError(images.length > 0 ? '' : 'No example images were found.')
       })
       .catch(error => {
@@ -61,23 +90,47 @@ export const useAutoraterViewModel = ({
     clearChatContext()
   }
 
-  const startAutoraterSession = async (imageB64: string, loadingText = 'Analyzing example...') => {
+  const preparePractice = () => {
+    closeWorkspace()
+    resetExamplePage()
+    setAutoraterMode(true)
+    setPracticePhase('intro')
+    setAutoraterStarted(false)
+    setAutoraterLoading(false)
+    setCurrentExampleIndex(0)
+    setCurrentExampleImage(exampleImagePaths[0] || '')
+    setCurrentProblemTotal(0)
+    setPracticeError('')
+    setCompletedExamples(0)
+    setUserMessageCount(0)
+    setSessionStartedAt(null)
+    setElapsedSeconds(0)
+  }
+
+  const startAutoraterSession = async (imageB64: string, loadingText: string) => {
     setAutoraterLoading(true)
-    const msgId = Date.now()
-    setExampleMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: msgId }])
+    setAutoraterStarted(false)
+    setPracticeError('')
+    const messageId = Date.now()
+    setExampleMessages(prev => [...prev, { role: 'assistant', text: loadingText, id: messageId }])
 
     try {
       const data = await autoraterClient.start(imageB64)
-      setExampleMessages(prev => prev.map(m => (
-        m.id === msgId ? { ...m, text: formatIsabellaText(data.opener, data.mode) } : m
+      setExampleMessages(prev => prev.map(message => (
+        message.id === messageId
+          ? { ...message, text: formatIsabellaText(data.opener, data.mode) }
+          : message
       )))
+      setCurrentProblemTotal(data.total_problems)
       setAutoraterStarted(true)
+      setPracticePhase('solving')
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      console.error('Error starting autorater:', msg)
-      setExampleMessages(prev => prev.map(m =>
-        m.id === msgId ? { ...m, text: `Failed to start: ${msg}` } : m
-      ))
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Error starting autorater:', message)
+      setExampleMessages(prev => prev.map(item => (
+        item.id === messageId ? { ...item, text: `Failed to start: ${message}` } : item
+      )))
+      setPracticeError(`Isabella could not start this example: ${message}`)
     } finally {
       setAutoraterLoading(false)
     }
@@ -85,125 +138,141 @@ export const useAutoraterViewModel = ({
 
   const startExampleSession = async (exampleIndex: number, resetConversation: boolean) => {
     let imagePaths = exampleImagePaths
-
-    setAutoraterMode(true)
+    openWorkspace()
+    setPracticePhase('solving')
     setAutoraterStarted(false)
     setExampleImageError('')
-    openWorkspace()
-    if (resetConversation) {
-      resetExamplePage()
-    }
+    setPracticeError('')
+    if (resetConversation) resetExamplePage()
 
     if (imagePaths.length === 0) {
-      setAutoraterLoading(true)
-      try {
-        imagePaths = (await autoraterClient.getExamples()).images
-        setExampleImagePaths(imagePaths)
-        setExampleImageError(imagePaths.length > 0 ? '' : 'No example images were found.')
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error)
-        console.error('Error loading examples:', msg)
-        setExampleImageError(`Failed to load examples: ${msg}`)
-        setExampleMessages(prev => [...prev, { role: 'assistant', text: `Failed to load examples: ${msg}` }])
-        setAutoraterLoading(false)
-        return
-      }
-      setAutoraterLoading(false)
+      imagePaths = await loadExamples()
     }
 
     const imagePath = imagePaths[exampleIndex]
     if (!imagePath) {
       setExampleImageError('No example image was found for this step.')
-      setExampleMessages(prev => [...prev, { role: 'assistant', text: 'No example images were found.' }])
       return
     }
 
     setCurrentExampleIndex(exampleIndex)
     setCurrentExampleImage(imagePath)
-    setExampleImageError('')
+    setCurrentProblemTotal(0)
 
     try {
       const imageB64 = await loadImageAsDataUrl(imagePath)
       await startAutoraterSession(imageB64, `Loading Example ${exampleIndex + 1}...`)
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      console.error('Error loading example:', msg)
-      setExampleImageError(`Failed to prepare example: ${msg}`)
-      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Failed to load example: ${msg}` }])
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Error loading example:', message)
+      setExampleImageError(`Failed to prepare example: ${message}`)
       setAutoraterLoading(false)
     }
   }
 
+  const beginPractice = async () => {
+    setCompletedExamples(0)
+    setUserMessageCount(0)
+    setElapsedSeconds(0)
+    setSessionStartedAt(Date.now())
+    await startExampleSession(0, true)
+  }
+
   const sendAutoraterMessage = async () => {
     const messageText = exampleInput.trim()
-    if (!messageText || autoraterLoading) return
+    if (!messageText || autoraterLoading || practicePhase !== 'solving') return
 
     setExampleMessages(prev => [...prev, { role: 'user', text: messageText }])
     setExampleInput('')
+    setUserMessageCount(prev => prev + 1)
     setAutoraterLoading(true)
 
     try {
       const data = await autoraterClient.chat(messageText)
-
       setExampleMessages(prev => [...prev, { role: 'assistant', text: formatIsabellaText(data.reply, data.mode) }])
       if (data.next_opener) {
-        const nextOpener = data.next_opener
         setExampleMessages(prev => [...prev, {
           role: 'assistant',
-          text: formatIsabellaText(nextOpener, data.next_mode),
+          text: formatIsabellaText(data.next_opener!, data.next_mode),
         }])
       }
       if (data.is_done) {
-        const nextExampleIndex = currentExampleIndex + 1
-        if (nextExampleIndex < exampleImagePaths.length) {
-          await startExampleSession(nextExampleIndex, false)
-        } else {
-          setAutoraterStarted(false)
-          setExampleMessages(prev => [...prev, { role: 'assistant', text: 'Isabella: Great work. You finished all of the examples.' }])
-          window.setTimeout(() => {
-            endExampleSession()
-          }, 1200)
-        }
+        setCompletedExamples(prev => Math.max(prev, currentExampleIndex + 1))
+        setAutoraterStarted(false)
+        setPracticePhase('example-complete')
       }
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      console.error('Error in autorater chat:', msg)
-      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Error: ${msg}` }])
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Error in autorater chat:', message)
+      setExampleMessages(prev => [...prev, { role: 'assistant', text: `Error: ${message}` }])
     } finally {
       setAutoraterLoading(false)
     }
   }
 
-  const endExampleSession = () => {
-    setAutoraterMode(false)
-    setAutoraterStarted(false)
-    setAutoraterLoading(false)
-    resetExamplePage()
-    setCurrentExampleIndex(0)
-    setCurrentExampleImage(exampleImagePaths[0] || '')
-    returnHome()
+  const continuePractice = async () => {
+    if (practicePhase !== 'example-complete') return
+    if (isLastExample) {
+      const seconds = sessionStartedAt ? Math.max(1, Math.round((Date.now() - sessionStartedAt) / 1000)) : 0
+      setElapsedSeconds(seconds)
+      setPracticePhase('summary')
+      closeWorkspace()
+      return
+    }
+    await startExampleSession(currentExampleIndex + 1, false)
+  }
+
+  const retryCurrentExample = async () => {
+    setPracticeError('')
+    setExampleMessages(prev => prev.filter(message => !message.text.startsWith('Failed to start:')))
+    await startExampleSession(currentExampleIndex, false)
   }
 
   const resetRuntime = () => {
+    closeWorkspace()
     setAutoraterMode(false)
+    setPracticePhase('idle')
     setAutoraterStarted(false)
     setAutoraterLoading(false)
+    setExampleInput('')
+    setExampleMessages([])
+    setCurrentExampleIndex(0)
+    setCurrentExampleImage(exampleImagePaths[0] || '')
+    setCurrentProblemTotal(0)
+    setExampleImageError('')
+    setPracticeError('')
+    setCompletedExamples(0)
+    setUserMessageCount(0)
+    setSessionStartedAt(null)
+    setElapsedSeconds(0)
+    clearChatContext()
   }
 
   return {
     autoraterMode,
+    practicePhase,
     autoraterStarted,
     autoraterLoading,
     exampleInput,
     exampleMessages,
     currentExampleIndex,
     currentExampleImage,
+    currentProblemTotal,
     exampleImageError,
-    endExampleSession,
+    practiceError,
+    completedExamples,
+    userMessageCount,
+    elapsedSeconds,
+    totalExamples,
+    isLastExample,
+    beginPractice,
+    continuePractice,
+    loadExamples,
+    preparePractice,
     resetRuntime,
+    retryCurrentExample,
     sendAutoraterMessage,
     setExampleImageError,
     setExampleInput,
-    startExampleSession,
   }
 }
