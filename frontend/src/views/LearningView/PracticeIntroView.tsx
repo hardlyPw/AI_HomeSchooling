@@ -38,10 +38,10 @@ export default function PracticeIntroView({
         <div className="practice-intro-mark" aria-hidden="true">
           <BrainCircuit size={34} />
         </div>
-        <p className="practice-eyebrow">Practice with Isabella</p>
-        <h1>Ready to work through the examples?</h1>
+        <p className="practice-eyebrow">Focused practice with Isabella</p>
+        <h1>Ready for two exponential-function questions?</h1>
         <p className="practice-intro-copy">
-          Isabella will guide you one step at a time. You decide when to move to the next example.
+          Evaluate a function value, then diagnose a common negative-exponent mistake.
         </p>
 
         <div className="practice-session-facts">
@@ -55,7 +55,7 @@ export default function PracticeIntroView({
           <div>
             <BrainCircuit size={20} />
             <span>
-              <small>Examples</small>
+              <small>Practice set</small>
               <strong>{isLoading ? 'Loading...' : `${totalExamples} available`}</strong>
             </span>
           </div>

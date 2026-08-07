@@ -1022,6 +1022,41 @@ textarea {
   cursor: not-allowed;
 }
 
+@media (max-height: 800px) and (min-width: 701px) {
+  .practice-intro-content {
+    justify-content: flex-start;
+    padding: 28px 0 32px;
+  }
+
+  .practice-intro-mark {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 12px;
+  }
+
+  .practice-intro-content h1 {
+    font-size: 1.8rem;
+  }
+
+  .practice-intro-copy {
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
+  .practice-session-facts {
+    margin-top: 22px;
+  }
+
+  .practice-session-facts > div {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .practice-intro-actions {
+    margin-top: 18px;
+  }
+}
+
 .practice-summary-stats {
   width: 100%;
   display: grid;

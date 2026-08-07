@@ -43,7 +43,7 @@ export default function PracticeSummaryView({
           <div>
             <BookOpen size={20} />
             <strong>{completedExamples} / {totalExamples}</strong>
-            <span>Examples completed</span>
+            <span>Practice sets completed</span>
           </div>
           <div>
             <MessageCircle size={20} />

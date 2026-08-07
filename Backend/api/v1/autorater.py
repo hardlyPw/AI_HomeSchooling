@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from application.dependencies import get_autorater_service
@@ -37,12 +39,13 @@ def autorater_debug_mode(
 @router.get("/examples", response_model=ExampleImagesResponse)
 def autorater_examples(
     request: Request,
+    practice_set: Literal["focused", "full"] = "focused",
     service: AutoraterService = Depends(get_autorater_service),
 ):
     return ExampleImagesResponse(
         images=[
-            str(request.url_for("assets", path=f"Examples/{path.name}"))
-            for path in service.example_image_paths()
+            str(request.url_for("assets", path=f"{path.parent.name}/{path.name}"))
+            for path in service.example_image_paths(practice_set)
         ],
     )
 
@@ -60,10 +63,13 @@ def autorater_preload(
 
 @router.post("/preload-first", response_model=PreloadResponse)
 def autorater_preload_first(
+    practice_set: Literal["focused", "full"] = "focused",
     service: AutoraterService = Depends(get_autorater_service),
 ):
     try:
-        return PreloadResponse(status=service.preload_first_example_background())
+        return PreloadResponse(
+            status=service.preload_first_example_background(practice_set)
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to queue first example preload: {exc}")
 
