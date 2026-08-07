@@ -22,6 +22,7 @@ from domain.agents.jiho import JIHO_DEFINITION
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = BACKEND_DIR / "assets" / "Examples"
+FOCUSED_EXAMPLES_DIR = BACKEND_DIR / "assets" / "FocusedPractice"
 
 
 def _session_limit() -> int:
@@ -159,6 +160,7 @@ def _get_autorater_service() -> AutoraterService:
         create_legacy_backed_isabella_agent(),
         TempImageStorage(),
         EXAMPLES_DIR,
+        FOCUSED_EXAMPLES_DIR,
     )
 
 

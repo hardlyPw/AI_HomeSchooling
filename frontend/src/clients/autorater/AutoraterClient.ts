@@ -15,13 +15,15 @@ export interface AutoraterChatResponse {
   is_done: boolean
 }
 
+export type PracticeSet = 'focused' | 'full'
+
 export class AutoraterClient {
-  getExamples(): Promise<{ images: string[] }> {
-    return httpClient.getJson(`${AUTORATER_API_URL}/examples`)
+  getExamples(practiceSet: PracticeSet = 'focused'): Promise<{ images: string[] }> {
+    return httpClient.getJson(`${AUTORATER_API_URL}/examples?practice_set=${practiceSet}`)
   }
 
-  preloadFirst(): Promise<{ status: string }> {
-    return httpClient.postJson(`${AUTORATER_API_URL}/preload-first`)
+  preloadFirst(practiceSet: PracticeSet = 'focused'): Promise<{ status: string }> {
+    return httpClient.postJson(`${AUTORATER_API_URL}/preload-first?practice_set=${practiceSet}`)
   }
 
   start(imageB64: string): Promise<StartAutoraterResponse> {

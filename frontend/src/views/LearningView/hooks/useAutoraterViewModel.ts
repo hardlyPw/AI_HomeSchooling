@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
-import { autoraterClient } from '../../../clients/autorater/AutoraterClient'
+import {
+  autoraterClient,
+  type PracticeSet,
+} from '../../../clients/autorater/AutoraterClient'
 import type { Message } from '../../../types'
 import { formatIsabellaText, loadImageAsDataUrl } from '../../../utils'
 
 export type PracticePhase = 'idle' | 'intro' | 'solving' | 'example-complete' | 'summary'
+const PRACTICE_SET: PracticeSet = 'focused'
 
 interface UseAutoraterViewModelParams {
   clearChatContext: () => void
@@ -37,7 +41,7 @@ export const useAutoraterViewModel = ({
   const isLastExample = totalExamples > 0 && currentExampleIndex === totalExamples - 1
 
   useEffect(() => {
-    autoraterClient.preloadFirst().catch(error => {
+    autoraterClient.preloadFirst(PRACTICE_SET).catch(error => {
       console.error('Error preloading first autorater example:', error)
     })
   }, [])
@@ -46,7 +50,7 @@ export const useAutoraterViewModel = ({
     setAutoraterLoading(true)
     setExampleImageError('')
     try {
-      const { images } = await autoraterClient.getExamples()
+      const { images } = await autoraterClient.getExamples(PRACTICE_SET)
       setExampleImagePaths(images)
       setCurrentExampleImage(images[0] || '')
       if (images.length === 0) {
@@ -65,7 +69,7 @@ export const useAutoraterViewModel = ({
 
   useEffect(() => {
     let cancelled = false
-    autoraterClient.getExamples()
+    autoraterClient.getExamples(PRACTICE_SET)
       .then(({ images }) => {
         if (cancelled) return
         setExampleImagePaths(images)

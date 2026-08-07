@@ -4,7 +4,7 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from domain.problem_solving.autorater import AutoraterChatResult, AutoraterStartResult
 from infrastructure.adapters.isabella_solver_agent import IsabellaSolverAgent
@@ -12,6 +12,7 @@ from infrastructure.storage.temp_image_storage import TempImageStorage
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+PracticeSet = Literal["focused", "full"]
 
 
 class AutoraterService:
@@ -20,10 +21,14 @@ class AutoraterService:
         adapter: IsabellaSolverAgent,
         storage: TempImageStorage,
         examples_dir: Path,
+        focused_examples_dir: Path,
     ) -> None:
         self._adapter = adapter
         self._storage = storage
-        self._examples_dir = examples_dir
+        self._example_dirs: dict[PracticeSet, Path] = {
+            "focused": focused_examples_dir,
+            "full": examples_dir,
+        }
         self._runtime_lock = threading.RLock()
         self._preload_threads: dict[str, threading.Thread] = {}
         self._preload_cache: dict[str, dict[str, Any]] = {}
@@ -39,13 +44,14 @@ class AutoraterService:
         with self._runtime_lock:
             return self._adapter.debug_state()
 
-    def example_image_paths(self) -> list[Path]:
-        if not self._examples_dir.is_dir():
+    def example_image_paths(self, practice_set: PracticeSet = "focused") -> list[Path]:
+        examples_dir = self._example_dirs[practice_set]
+        if not examples_dir.is_dir():
             return []
 
         return sorted(
             (
-                path for path in self._examples_dir.iterdir()
+                path for path in examples_dir.iterdir()
                 if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS
             ),
             key=self._natural_sort_key,
@@ -57,8 +63,8 @@ class AutoraterService:
         image_path = self._storage.write_png(image_bytes)
         return self._queue_preload(cache_key, image_path, cleanup_after=True)
 
-    def preload_first_example_background(self) -> str:
-        image_paths = self.example_image_paths()
+    def preload_first_example_background(self, practice_set: PracticeSet = "focused") -> str:
+        image_paths = self.example_image_paths(practice_set)
         if not image_paths:
             return "missing"
 
@@ -101,7 +107,7 @@ class AutoraterService:
 
             image_path = self._session.get("image_path")
             image_paths = [image_path] if image_path and os.path.isfile(image_path) else None
-            result = self._adapter.chat(message, image_paths)
+            result = self._adapter.reply(message, image_paths)
             if result.is_done:
                 self._session["active"] = False
             return result
