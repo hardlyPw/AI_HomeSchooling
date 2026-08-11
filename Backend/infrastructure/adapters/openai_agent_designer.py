@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 
-from domain.agents.conversation import ConversationPersonaConfig
+from domain.agents.conversation import ConversationPersonaConfig, GameSkillTier
 from domain.agents.conversation_creation import (
     ConversationAgentQuestionnaire,
     GeneratedConversationAgentDesign,
@@ -87,6 +87,7 @@ class OpenAIConversationAgentDesigner:
             cooldown_reasons=tuple(
                 str(value).strip() for value in payload["cooldown_reasons"]
             ),
+            game_skill_tier=GameSkillTier(payload["game_skill_tier"]),
         )
 
     @staticmethod
@@ -106,6 +107,11 @@ Select behavior values only from these exact enums:
 - double_text: never | occasional | frequent
 - affinity_sensitivity: steady | balanced | reactive
 - initial_closeness: new | acquainted | friend | close
+- game_skill_tier: easy | normal | hard
+
+Choose game_skill_tier once from the character's reasoning ability, confidence, and
+competitiveness. It is a permanent character trait. Do not describe algorithms or
+numeric probabilities.
 
 Do not output probabilities, durations, model names, token limits, affinity numbers, database names, memory limits, or safety policies. The backend maps enum values to those settings.
 
@@ -134,5 +140,6 @@ Required JSON shape:
     "affinity_sensitivity": "enum",
     "initial_closeness": "enum"
   },
+  "game_skill_tier": "easy | normal | hard",
   "cooldown_reasons": ["three to six short in-character reasons"]
 }"""

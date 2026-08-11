@@ -6,6 +6,7 @@ export type NavigationTarget =
   | { view: 'agent-chat'; agentId: string }
   | { view: 'lesson'; lectureId?: string }
   | { view: 'playlist' }
+  | { view: 'game' }
 
 export interface NavigationController {
   currentView: AppMode
@@ -14,6 +15,7 @@ export interface NavigationController {
   openAgentChat: (agentId: string) => void
   openLesson: (lectureId?: string) => void
   openPlaylist: () => void
+  openGame: () => void
 }
 
 export const viewFromTarget = (target: NavigationTarget): AppMode => {
@@ -28,5 +30,7 @@ export const viewFromTarget = (target: NavigationTarget): AppMode => {
       return 'lesson'
     case 'playlist':
       return 'playlist'
+    case 'game':
+      return 'game'
   }
 }

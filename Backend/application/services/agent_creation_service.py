@@ -64,6 +64,7 @@ class ConversationAgentCreationService:
             description=design.description.strip(),
             persona=design.persona,
             initial_affinity=initial_affinity,
+            game_skill_tier=design.game_skill_tier,
             capabilities=GENERATED_AGENT_CAPABILITIES,
         )
         return AgentDefinition(

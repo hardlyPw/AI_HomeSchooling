@@ -136,6 +136,11 @@ class JihoMemoryRepository:
             return
         self._reset_session_timer()
 
+    def record_activity_memory(self, description: str, poignancy: int = 3) -> None:
+        if not self._uses_long_term_memory() or not description.strip():
+            return
+        self._save_memory("act", description.strip(), max(1, min(5, poignancy)))
+
     def shutdown(self) -> None:
         if self._uses_long_term_memory():
             with self._session_timer_lock:

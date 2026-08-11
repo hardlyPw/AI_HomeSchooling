@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from domain.agents.conversation import ConversationPersonaConfig
+from domain.agents.conversation import ConversationPersonaConfig, GameSkillTier
 from domain.agents.conversation_presets import ConversationBehaviorSelection
 
 
@@ -32,6 +32,7 @@ class GeneratedConversationAgentDesign:
     persona: ConversationPersonaConfig
     behavior_selection: ConversationBehaviorSelection
     cooldown_reasons: tuple[str, ...]
+    game_skill_tier: GameSkillTier
 
 
 class ConversationAgentDesigner(Protocol):

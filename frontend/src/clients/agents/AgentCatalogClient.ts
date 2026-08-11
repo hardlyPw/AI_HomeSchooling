@@ -1,5 +1,5 @@
 import { BACKEND_BASE_URL } from '../../constants'
-import type { AgentCapability, AgentProfile } from '../../domain/agents/AgentProfile'
+import type { AgentCapability, AgentProfile, GameSkillTier } from '../../domain/agents/AgentProfile'
 import { httpClient } from '../httpClient'
 
 export interface AgentSummaryResponse {
@@ -8,6 +8,7 @@ export interface AgentSummaryResponse {
   name: string
   description: string
   initial_affinity: number
+  game_skill_tier: GameSkillTier
   capabilities: string[]
   is_builtin: boolean
 }
@@ -44,6 +45,7 @@ const toProfile = (agent: AgentSummaryResponse): AgentProfile => {
     description: agent.description,
     entryLabel: `Talk with ${agent.name}`,
     initialAffinity: agent.initial_affinity,
+    gameSkillTier: agent.game_skill_tier,
     chatEndpoint: `${root}/chat/stream`,
     historyEndpoint: `${root}/history`,
     stateEndpoint: `${root}/state`,

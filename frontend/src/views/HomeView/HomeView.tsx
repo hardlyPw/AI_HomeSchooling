@@ -1,4 +1,4 @@
-import { BookOpen, Bot, BrainCircuit, MessageCircle, Plus, Trash2, X } from 'lucide-react'
+import { BookOpen, Bot, BrainCircuit, Gamepad2, MessageCircle, Plus, Trash2, X } from 'lucide-react'
 import type { HomeViewModel } from './useHomeViewModel'
 
 interface HomeViewProps {
@@ -37,6 +37,14 @@ export default function HomeView({ vm }: HomeViewProps) {
             <span>
               <strong>Add Agent</strong>
               <small>Design a new conversation friend</small>
+            </span>
+          </button>
+
+          <button className="home-action" onClick={vm.openGame}>
+            <Gamepad2 size={22} />
+            <span>
+              <strong>Play a game</strong>
+              <small>Match exponential graphs with an Agent</small>
             </span>
           </button>
         </div>

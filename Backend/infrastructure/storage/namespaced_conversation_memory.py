@@ -54,6 +54,16 @@ class NamespacedConversationMemoryStore:
             entries.append(description)
             del entries[:-self._max_entries]
 
+    def record_activity(
+        self,
+        namespace: ConversationMemoryNamespace,
+        description: str,
+    ) -> None:
+        with self._lock:
+            entries = self._entries.setdefault(namespace, [])
+            entries.append(description.strip())
+            del entries[:-self._max_entries]
+
     def clear(self, namespace: ConversationMemoryNamespace) -> None:
         with self._lock:
             self._entries.pop(namespace, None)

@@ -15,6 +15,7 @@ from api.v1.autorater import (
 )
 from api.v1.friend import router as friend_router
 from api.v1.agents import router as agents_router
+from api.v1.games import router as games_router
 
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
@@ -60,6 +61,7 @@ app.include_router(lesson_router, prefix="/api/v1/lesson", tags=["Lesson"])
 app.include_router(autorater_router, prefix="/api/v1/autorater", tags=["Autorater"])
 app.include_router(friend_router, prefix="/api/v1/friend", tags=["Friend"])
 app.include_router(agents_router, prefix="/api/v1/agents", tags=["Agents"])
+app.include_router(games_router, prefix="/api/v1/games", tags=["Games"])
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR, check_dir=False), name="assets")
 
 @app.get("/")

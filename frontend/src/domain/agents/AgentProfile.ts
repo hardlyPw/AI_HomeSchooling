@@ -1,4 +1,5 @@
 export type AgentCapability = 'free-chat' | 'affinity' | 'debug-telemetry' | 'problem-solving'
+export type GameSkillTier = 'easy' | 'normal' | 'hard'
 
 export interface AgentProfile {
   id: string
@@ -6,6 +7,7 @@ export interface AgentProfile {
   description: string
   entryLabel: string
   initialAffinity: number
+  gameSkillTier: GameSkillTier
   chatEndpoint: string
   historyEndpoint?: string
   stateEndpoint?: string

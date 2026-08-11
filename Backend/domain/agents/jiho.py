@@ -6,6 +6,7 @@ from domain.agents.conversation import (
     ConversationBehaviorConfig,
     ConversationCapability,
     ConversationPersonaConfig,
+    GameSkillTier,
 )
 from domain.agents.conversation_defaults import DEFAULT_CONVERSATION_RUNTIME
 from domain.agents.conversation_presets import (
@@ -42,6 +43,7 @@ JIHO_PROFILE = ConversationAgentProfile(
         behavior_bans=JIHO_BEHAVIOR_BANS,
     ),
     initial_affinity=70,
+    game_skill_tier=GameSkillTier.NORMAL,
     capabilities=frozenset(
         {
             ConversationCapability.AFFINITY,

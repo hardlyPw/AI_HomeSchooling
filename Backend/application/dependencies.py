@@ -15,6 +15,7 @@ from application.services.agent_catalog_service import (
     AgentNotFoundError,
 )
 from application.services.friend_chat_service import FriendChatService
+from application.services.graph_match_service import GraphMatchService
 from application.services.lesson_chat_service import LessonChatService
 from application.services.autorater_service import AutoraterService
 from domain.agents.jiho import JIHO_DEFINITION
@@ -87,6 +88,20 @@ def _get_agent_catalog_service() -> AgentCatalogService:
     return AgentCatalogService(
         _get_agent_repository(),
         _get_agent_creation_service(),
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_graph_match_service() -> GraphMatchService:
+    from infrastructure.adapters.game_activity_memory import GameActivityMemoryWriter
+    from infrastructure.repositories.in_memory_graph_match_repository import (
+        InMemoryGraphMatchRepository,
+    )
+
+    return GraphMatchService(
+        InMemoryGraphMatchRepository(),
+        _get_agent_catalog_service(),
+        GameActivityMemoryWriter(_get_agent_memory_store()),
     )
 
 
@@ -172,6 +187,10 @@ def get_friend_chat_service(
 
 def get_agent_catalog_service() -> AgentCatalogService:
     return _get_agent_catalog_service()
+
+
+def get_graph_match_service() -> GraphMatchService:
+    return _get_graph_match_service()
 
 
 def get_agent_chat_service(

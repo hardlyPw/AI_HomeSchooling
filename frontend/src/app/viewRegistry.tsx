@@ -7,6 +7,7 @@ import { LECTURES } from '../constants'
 import type { HomeViewModel } from '../views/HomeView/useHomeViewModel'
 import AgentCreateView from '../views/AgentCreateView/AgentCreateView'
 import type { AgentCreateViewModel } from '../views/AgentCreateView/useAgentCreateViewModel'
+import GraphMatchView from '../views/GameView/GraphMatchView'
 
 export interface ViewRegistryContext {
   homeVm: HomeViewModel
@@ -47,4 +48,9 @@ export const viewRegistry: Record<AppMode, ViewRenderer> = {
     />
   ),
   lesson: ({ renderLessonView }) => renderLessonView(),
+  game: ({ homeVm, openHome }) => (
+    <div className="main-layout game-layout">
+      <GraphMatchView agents={homeVm.agents} onExit={openHome} />
+    </div>
+  ),
 }
