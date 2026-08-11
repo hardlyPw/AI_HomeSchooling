@@ -3,6 +3,7 @@ import { gameClient, type AgentCardTurn, type MemoryMatchState } from '../../cli
 import type { AgentProfile } from '../../domain/agents/AgentProfile'
 
 const wait = (duration: number) => new Promise(resolve => window.setTimeout(resolve, duration))
+const ROOM_READY_SECONDS = 10
 
 export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id ?? 'jiho')
@@ -14,6 +15,8 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const [phaseStartedAt, setPhaseStartedAt] = useState(0)
   const [now, setNow] = useState(0)
   const [isBusy, setIsBusy] = useState(false)
+  const [challengePending, setChallengePending] = useState(false)
+  const [isRoomCountdown, setIsRoomCountdown] = useState(false)
   const [error, setError] = useState('')
   const [quickMenuOpen, setQuickMenuOpen] = useState(false)
   const [userBubble, setUserBubble] = useState('')
@@ -46,11 +49,17 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
 
   const start = async () => {
     setIsBusy(true)
+    setChallengePending(true)
     setError('')
     try {
-      const next = await gameClient.startMemoryMatch(selectedAgentId)
+      const challengeDelay = 3000 + Math.floor(Math.random() * 2001)
+      const [next] = await Promise.all([
+        gameClient.startMemoryMatch(selectedAgentId),
+        wait(challengeDelay),
+      ])
       boardValues.current = next.cards.map(card => card.value ?? 0)
       setState(next)
+      setIsRoomCountdown(true)
       setDisplayAgentScore(0)
       setSelectedCards([])
       selectedCardsRef.current = []
@@ -60,11 +69,15 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Could not start Memory Match.')
     } finally {
+      setChallengePending(false)
       setIsBusy(false)
     }
   }
 
-  const previewRemaining = state?.phase === 'preview'
+  const roomRemaining = state?.phase === 'preview' && isRoomCountdown
+    ? Math.max(0, ROOM_READY_SECONDS - Math.floor((now - phaseStartedAt) / 1000))
+    : 0
+  const previewRemaining = state?.phase === 'preview' && !isRoomCountdown
     ? Math.max(0, state.preview_seconds - Math.floor((now - phaseStartedAt) / 1000))
     : 0
   const turnRemaining = state?.phase === 'player_turn'
@@ -72,7 +85,18 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     : 0
 
   useEffect(() => {
-    if (!state || state.phase !== 'preview' || previewRemaining > 0 || actionInFlight.current) return
+    if (!state || state.phase !== 'preview' || !isRoomCountdown || roomRemaining > 0) return
+    const transitionTimer = window.setTimeout(() => {
+      const startedAt = Date.now()
+      setIsRoomCountdown(false)
+      setNow(startedAt)
+      setPhaseStartedAt(startedAt)
+    }, 0)
+    return () => window.clearTimeout(transitionTimer)
+  }, [isRoomCountdown, roomRemaining, state])
+
+  useEffect(() => {
+    if (!state || state.phase !== 'preview' || isRoomCountdown || previewRemaining > 0 || actionInFlight.current) return
     actionInFlight.current = true
     gameClient.readyMemoryMatch(state.id)
       .then(next => {
@@ -81,7 +105,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
       })
       .catch(requestError => setError(requestError instanceof Error ? requestError.message : 'Could not hide the cards.'))
       .finally(() => { actionInFlight.current = false })
-  }, [previewRemaining, state])
+  }, [isRoomCountdown, previewRemaining, state])
 
   const animateAgentTurns = useCallback(async (turns: AgentCardTurn[]) => {
     for (const turn of turns) {
@@ -187,8 +211,12 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     selectedAgent: agents.find(agent => agent.id === (state?.agent_id ?? selectedAgentId)) ?? agents[0],
     state,
     isBusy,
+    challengePending,
     error,
+    isRoomCountdown,
+    roomRemaining,
     previewRemaining,
+    showFlipWarning: state?.phase === 'preview' && !isRoomCountdown && previewRemaining > 0 && previewRemaining <= 5,
     turnRemaining,
     displayAgentScore,
     quickMenuOpen,
@@ -199,7 +227,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     chooseCard,
     sendQuickChat,
     cardValue: (index: number) => boardValues.current[index] ?? null,
-    isRevealed: (index: number) => state?.phase === 'preview' || revealedIndices.has(index) || matchedIndices.has(index),
+    isRevealed: (index: number) => (state?.phase === 'preview' && !isRoomCountdown && previewRemaining > 0) || revealedIndices.has(index) || matchedIndices.has(index),
     isMatched: (index: number) => matchedIndices.has(index),
     restart: () => setState(null),
   }
