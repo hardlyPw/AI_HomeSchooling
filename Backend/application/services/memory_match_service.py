@@ -130,10 +130,11 @@ class MemoryMatchService:
             return
         session.phase = "completed"
         session.completed_at = datetime.now(timezone.utc)
+        outcome = "Won" if session.user_score > session.agent_score else "Lost" if session.user_score < session.agent_score else "Drew"
         self._leaderboard.record(
             game_id=GameId.MEMORY_MATCH,
             user_id=session.user_id,
             player_name=session.player_name,
             score=session.user_score,
-            detail=f"{session.user_score}-{session.agent_score} vs {session.agent_name}",
+            detail=f"{outcome} {session.user_score}-{session.agent_score} vs {session.agent_name}",
         )

@@ -73,3 +73,6 @@ create table if not exists public.game_leaderboard_scores (
 
 create index if not exists game_leaderboard_rank_idx
     on public.game_leaderboard_scores (game_id, score desc, played_at asc);
+
+create index if not exists game_leaderboard_history_idx
+    on public.game_leaderboard_scores (game_id, played_at desc);

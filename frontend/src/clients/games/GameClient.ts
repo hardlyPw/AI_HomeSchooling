@@ -74,6 +74,7 @@ export interface LeaderboardEntry {
 
 export interface LeaderboardState {
   game_id: GameId
+  view_mode: 'ranking' | 'match_history'
   entries: LeaderboardEntry[]
 }
 

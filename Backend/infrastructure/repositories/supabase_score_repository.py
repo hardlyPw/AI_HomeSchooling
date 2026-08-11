@@ -32,6 +32,21 @@ class SupabaseScoreRepository:
             .limit(limit)
             .execute()
         )
+        return self._entries(response.data or [])
+
+    def list_recent(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
+        response = (
+            self._client.table("game_leaderboard_scores")
+            .select("*")
+            .eq("game_id", game_id.value)
+            .order("played_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return self._entries(response.data or [])
+
+    @staticmethod
+    def _entries(rows) -> list[ScoreEntry]:
         return [
             ScoreEntry(
                 id=row["id"],
@@ -42,5 +57,5 @@ class SupabaseScoreRepository:
                 detail=row["detail"],
                 played_at=datetime.fromisoformat(row["played_at"].replace("Z", "+00:00")),
             )
-            for row in response.data or []
+            for row in rows
         ]

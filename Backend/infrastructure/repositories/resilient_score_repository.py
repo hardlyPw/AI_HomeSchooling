@@ -26,14 +26,22 @@ class ResilientScoreRepository:
             self._logger.warning("Leaderboard Supabase save failed: %s", exc)
 
     def list(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
-        local = self._local.list(game_id, limit)
+        return self._load(game_id, limit, recent=False)
+
+    def list_recent(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
+        return self._load(game_id, limit, recent=True)
+
+    def _load(self, game_id: GameId, limit: int, *, recent: bool) -> list[ScoreEntry]:
+        local = self._local.list_recent(game_id, limit) if recent else self._local.list(game_id, limit)
         if time.monotonic() < self._retry_remote_at:
             return local
         try:
-            remote = self._remote.list(game_id, limit)
+            remote = self._remote.list_recent(game_id, limit) if recent else self._remote.list(game_id, limit)
         except Exception as exc:
             self._retry_remote_at = time.monotonic() + 60
             self._logger.warning("Leaderboard Supabase load failed: %s", exc)
             return local
         merged = {entry.id: entry for entry in [*remote, *local]}
+        if recent:
+            return sorted(merged.values(), key=lambda item: item.played_at, reverse=True)[:limit]
         return sorted(merged.values(), key=lambda item: (-item.score, item.played_at))[:limit]

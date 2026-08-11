@@ -44,7 +44,7 @@ export default function HomeView({ vm }: HomeViewProps) {
             <Gamepad2 size={22} />
             <span>
               <strong>Play a game</strong>
-              <small>Solo challenges, Agent duels, and rankings</small>
+              <small>Solo challenges, Agent duels, and game history</small>
             </span>
           </button>
         </div>
