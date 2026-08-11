@@ -26,6 +26,7 @@ function App() {
     onOpenCreateAgent: () => setAppMode('agent-create'),
     onOpenLesson: learningVm.openLecture,
     onOpenProblemSolving: learningVm.enterAutoraterMode,
+    onOpenGame: () => setAppMode('game'),
   })
 
   const agentCreateVm = useAgentCreateViewModel({

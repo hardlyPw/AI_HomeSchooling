@@ -8,6 +8,7 @@ export const agentRegistry: Record<string, AgentProfile> = {
     description: 'A blunt peer friend with affinity, memory, and debug telemetry.',
     entryLabel: 'Talk with Jiho',
     initialAffinity: 70,
+    gameSkillTier: 'normal',
     chatEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/chat/stream`,
     historyEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/history`,
     stateEndpoint: `${BACKEND_BASE_URL}/api/v1/agents/jiho/state`,

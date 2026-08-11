@@ -30,6 +30,14 @@ class AvailabilityMode(str, Enum):
     COOLDOWN = "cooldown"
 
 
+class GameSkillTier(str, Enum):
+    """Fixed game ability selected once for an Agent."""
+
+    EASY = "easy"
+    NORMAL = "normal"
+    HARD = "hard"
+
+
 @dataclass(frozen=True)
 class ConversationPersonaConfig:
     """Natural-language character material produced by the Agent designer."""
@@ -51,6 +59,7 @@ class ConversationAgentProfile:
     description: str
     persona: ConversationPersonaConfig
     initial_affinity: int
+    game_skill_tier: GameSkillTier = GameSkillTier.NORMAL
     affinity_min: int = 0
     affinity_max: int = 100
     capabilities: frozenset[ConversationCapability] = field(default_factory=frozenset)

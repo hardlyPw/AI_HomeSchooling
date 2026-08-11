@@ -22,6 +22,7 @@ class AgentSummary(BaseModel):
     name: str
     description: str
     initial_affinity: int
+    game_skill_tier: str
     capabilities: list[str]
     is_builtin: bool = False
 

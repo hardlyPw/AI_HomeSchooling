@@ -14,6 +14,7 @@ interface UseHomeViewModelParams {
   onOpenCreateAgent: () => void
   onOpenLesson: (lectureId?: string) => void
   onOpenProblemSolving: () => void
+  onOpenGame: () => void
 }
 
 export interface HomeViewModel {
@@ -28,6 +29,7 @@ export interface HomeViewModel {
   refreshAgents: () => Promise<void>
   openLesson: () => void
   openProblemSolving: () => void
+  openGame: () => void
   cancelDeleteAgent: () => void
   confirmDeleteAgent: () => Promise<void>
   requestDeleteAgent: (agentId: string) => void
@@ -38,6 +40,7 @@ export const useHomeViewModel = ({
   onOpenCreateAgent,
   onOpenLesson,
   onOpenProblemSolving,
+  onOpenGame,
 }: UseHomeViewModelParams): HomeViewModel => {
   const [agents, setAgents] = useState<AgentProfile[]>(listAgentProfiles())
   const [isLoadingAgents, setIsLoadingAgents] = useState(true)
@@ -110,6 +113,7 @@ export const useHomeViewModel = ({
     refreshAgents,
     openLesson: () => onOpenLesson(LECTURES[0].id),
     openProblemSolving: onOpenProblemSolving,
+    openGame: onOpenGame,
     cancelDeleteAgent: () => setPendingDeleteId(''),
     confirmDeleteAgent,
     requestDeleteAgent: setPendingDeleteId,

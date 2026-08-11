@@ -16,7 +16,7 @@ from api.v1.agents import router
 from application.dependencies import get_agent_catalog_service
 from application.services.agent_catalog_service import AgentCatalogService
 from application.services.agent_creation_service import ConversationAgentCreationService
-from domain.agents.conversation import ConversationPersonaConfig
+from domain.agents.conversation import ConversationPersonaConfig, GameSkillTier
 from domain.agents.conversation_creation import GeneratedConversationAgentDesign
 from domain.agents.conversation_presets import (
     AffinitySensitivityLevel,
@@ -54,6 +54,7 @@ class FakeDesigner:
                 initial_closeness=InitialClosenessLevel.FRIEND,
             ),
             cooldown_reasons=("busy drawing",),
+            game_skill_tier=GameSkillTier.EASY,
         )
 
 
@@ -81,6 +82,7 @@ class AgentsApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["id"], "mina")
+        self.assertEqual(response.json()["game_skill_tier"], "easy")
         listed = self.client.get("/api/v1/agents")
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["agents"][0]["name"], "Mina")

@@ -12,6 +12,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from domain.agents.conversation_creation import ConversationAgentQuestionnaire
+from domain.agents.conversation import GameSkillTier
 from domain.agents.conversation_presets import (
     AffinitySensitivityLevel,
     AvailabilityLevel,
@@ -57,6 +58,7 @@ class FakeCompletions:
                 "initial_closeness": "friend",
             },
             "cooldown_reasons": ["drawing", "at art club", "eating"],
+            "game_skill_tier": "normal",
         }
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
@@ -85,6 +87,7 @@ class OpenAIAgentDesignerTest(unittest.TestCase):
             AffinitySensitivityLevel.REACTIVE,
         )
         self.assertEqual(completions.kwargs["model"], AGENT_DESIGNER_MODEL)
+        self.assertEqual(design.game_skill_tier, GameSkillTier.NORMAL)
         self.assertEqual(completions.kwargs["max_tokens"], AGENT_DESIGNER_MAX_TOKENS)
         self.assertEqual(completions.kwargs["response_format"], {"type": "json_object"})
         system_prompt = completions.kwargs["messages"][0]["content"]

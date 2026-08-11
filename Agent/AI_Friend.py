@@ -55,6 +55,10 @@ def record_turn(user_text: str, ai_text: str, session_break: bool = False) -> No
     _memory_repository.record_turn(user_text, ai_text, session_break=session_break)
 
 
+def record_activity_memory(description: str, poignancy: int = 3) -> None:
+    _memory_repository.record_activity_memory(description, poignancy=poignancy)
+
+
 def memory_shutdown() -> None:
     """프로세스 종료 시 pending 세션을 chat 으로 마무리."""
     _memory_repository.shutdown()

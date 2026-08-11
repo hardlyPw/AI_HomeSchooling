@@ -10,7 +10,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from application.services.agent_creation_service import ConversationAgentCreationService
-from domain.agents.conversation import ConversationPersonaConfig
+from domain.agents.conversation import ConversationPersonaConfig, GameSkillTier
 from domain.agents.conversation_creation import (
     ConversationAgentQuestionnaire,
     GeneratedConversationAgentDesign,
@@ -58,6 +58,7 @@ class FakeAgentDesigner:
                 initial_closeness=InitialClosenessLevel.ACQUAINTED,
             ),
             cooldown_reasons=("drawing", "at art club"),
+            game_skill_tier=GameSkillTier.HARD,
         )
 
 
@@ -81,6 +82,7 @@ class AgentCreationServiceTest(unittest.TestCase):
         self.assertEqual(definition.agent_type, AgentType.CONVERSATION)
         self.assertEqual(definition.profile.agent_id, "mina-test")
         self.assertEqual(definition.profile.initial_affinity, 50)
+        self.assertEqual(definition.profile.game_skill_tier, GameSkillTier.HARD)
         self.assertEqual(
             definition.profile.persona.behavior_bans[0],
             "Do not overpraise.",
