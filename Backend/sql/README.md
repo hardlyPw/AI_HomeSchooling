@@ -15,15 +15,22 @@ Run the script in the Supabase SQL editor after the `friend_memories_v2` table
 and demo seed rows exist. The application calls the RPC by the name configured
 in the Agent runtime definition.
 
-`graph_match_games.sql` creates the session, round, and quick-chat tables used
-by `SupabaseGraphMatchRepository`. Run it once before starting Graph Match with
-Supabase. These tables currently hold backend-owned single-user prototype data;
+`graph_match_games.sql` creates the legacy Graph Match session, round, and
+quick-chat tables used by `SupabaseGraphMatchRepository`. It also creates the
+shared `game_leaderboard_scores` table used by the current Graph Challenge and
+Memory Match leaderboards. Run it once before enabling Supabase-backed games.
+These tables currently hold backend-owned single-user prototype data;
 authentication and row-level ownership policies remain a later task.
 
 Graph Match uses Supabase by default. Set `GRAPH_MATCH_STORAGE=memory` only for
 local-only runs. If Supabase is temporarily unavailable, the resilient
 repository keeps the current process playable and retries remote persistence
 after a cooldown.
+
+Current game rankings also use Supabase by default. Set
+`GAME_SCORE_STORAGE=memory` for local-only runs. The resilient score repository
+keeps a process-local copy so ranking submission and lookup remain available
+during a temporary Supabase outage.
 
 ## Growth rule
 

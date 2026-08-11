@@ -13,6 +13,7 @@
     "function-plot": "^1.25.4",
     "katex": "^0.17.0",
     "lucide-react": "^1.11.0",
+    "mathjs": "^15.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
