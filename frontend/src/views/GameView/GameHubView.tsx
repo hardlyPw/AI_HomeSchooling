@@ -43,7 +43,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
             </button>
             <button className="game-catalog-item memory" onClick={vm.openMemory}>
               <span className="game-catalog-icon"><Brain size={32} /></span>
-              <span><small>Agent duel</small><strong>Memory Match</strong><p>Memorize 36 cards, find number pairs, and earn extra turns.</p><em>10s preview · 15s turns · Quick chat</em></span>
+              <span><small>Agent duel</small><strong>Memory Match</strong><p>Memorize 36 cards, find number pairs, and earn extra turns.</p><em>15s preview · 15s turns · Quick chat</em></span>
               <ChevronRight />
             </button>
           </div>

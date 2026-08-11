@@ -17,6 +17,7 @@ from application.services.memory_match_service import MemoryMatchService
 from domain.agents.jiho import JIHO_DEFINITION
 from domain.games.leaderboard import GameId, ScoreEntry
 from domain.games.math_expression import MathExpression
+from domain.games.memory_match import PREVIEW_SECONDS
 from infrastructure.repositories.in_memory_agent_repository import InMemoryConversationAgentRepository
 from infrastructure.repositories.in_memory_game_repository import (
     InMemoryGraphChallengeRepository,
@@ -75,6 +76,9 @@ class CurrentGameServiceTest(unittest.TestCase):
         self.assertEqual(session.total_score, 315.0)
         entries = self.leaderboard.list(GameId.GRAPH_CHALLENGE)
         self.assertEqual(entries[0].score, 315.0)
+
+    def test_memory_preview_reveals_cards_for_fifteen_seconds(self) -> None:
+        self.assertEqual(PREVIEW_SECONDS, 15)
 
     def test_memory_match_keeps_player_turn_after_a_pair(self) -> None:
         session = self.memory.start(user_id="demo-user", agent_id="jiho")

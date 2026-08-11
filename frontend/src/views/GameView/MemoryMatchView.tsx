@@ -1,4 +1,4 @@
-import { ArrowLeft, Brain, Clock3, MessageCircle, Play, RotateCcw, UserRound } from 'lucide-react'
+import { ArrowLeft, Brain, Check, Clock3, LoaderCircle, MessageCircle, Play, RotateCcw, UserRound } from 'lucide-react'
 import type { AgentProfile } from '../../domain/agents/AgentProfile'
 import { useMemoryMatchViewModel } from './useMemoryMatchViewModel'
 
@@ -25,15 +25,22 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
             <h2>Choose your opponent</h2>
             <div className="opponent-list" role="radiogroup" aria-label="Opponent">
               {agents.map(agent => (
-                <button key={agent.id} className={vm.selectedAgentId === agent.id ? 'opponent-option selected' : 'opponent-option'} onClick={() => vm.setSelectedAgentId(agent.id)} role="radio" aria-checked={vm.selectedAgentId === agent.id}>
-                  <span><strong>{agent.name}</strong><small>{agent.description}</small></span>
-                  <span className={`skill-badge ${agent.gameSkillTier}`}>{agent.gameSkillTier}</span>
+                <button key={agent.id} className={vm.selectedAgentId === agent.id ? 'opponent-option simple selected' : 'opponent-option simple'} onClick={() => vm.setSelectedAgentId(agent.id)} role="radio" aria-checked={vm.selectedAgentId === agent.id} disabled={vm.challengePending}>
+                  <span className="opponent-avatar">{agent.avatarByMood?.happy ? <img src={agent.avatarByMood.happy} alt="" /> : <Brain size={22} />}</span>
+                  <strong>{agent.name}</strong>
+                  {vm.selectedAgentId === agent.id && <Check size={20} aria-hidden="true" />}
                 </button>
               ))}
             </div>
-            <div className="game-rule-strip"><span>36 cards</span><span>10s preview</span><span>15s turn</span><span>Match = extra turn</span></div>
             {vm.error && <p className="game-error">{vm.error}</p>}
-            <button className="game-primary-button" onClick={() => void vm.start()} disabled={vm.isBusy || !agents.length}><Play size={18} /> {vm.isBusy ? 'Shuffling...' : 'Start duel'}</button>
+            {vm.challengePending ? (
+              <div className="memory-challenge-status" role="status">
+                <LoaderCircle size={20} />
+                <span><strong>Challenge sent</strong><small>Waiting for {vm.selectedAgent?.name ?? 'your opponent'} to accept...</small></span>
+              </div>
+            ) : (
+              <button className="game-primary-button" onClick={() => void vm.start()} disabled={vm.isBusy || !agents.length}><Play size={18} /> Start duel</button>
+            )}
           </div>
         </section>
       </main>
@@ -46,8 +53,8 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
     <main className="memory-game playing">
       <header className="memory-game-header">
         <button className="icon-button" onClick={onExit} aria-label="Exit game" title="Exit game"><ArrowLeft /></button>
-        <div><span className="game-eyebrow">Memory Match</span><h1>{complete ? 'Match complete' : vm.state.phase === 'preview' ? `Memorize · ${vm.previewRemaining}s` : vm.isBusy ? `${vm.state.agent_name} is playing` : `Your turn · ${vm.turnRemaining}s`}</h1></div>
-        {!complete && !vm.isBusy && <span className={vm.turnRemaining <= 5 && vm.state.phase === 'player_turn' ? 'timer urgent' : 'timer'}><Clock3 size={16} /> {vm.state.phase === 'preview' ? vm.previewRemaining : vm.turnRemaining}s</span>}
+        <div><span className="game-eyebrow">Memory Match</span><h1>{complete ? 'Match complete' : vm.isRoomCountdown ? `Get ready · ${vm.roomRemaining}s` : vm.state.phase === 'preview' ? `Memorize · ${vm.previewRemaining}s` : vm.isBusy ? `${vm.state.agent_name} is playing` : `Your turn · ${vm.turnRemaining}s`}</h1></div>
+        {!complete && !vm.isBusy && <span className={(vm.showFlipWarning || (vm.turnRemaining <= 5 && vm.state.phase === 'player_turn')) ? 'timer urgent' : 'timer'}><Clock3 size={16} /> {vm.isRoomCountdown ? vm.roomRemaining : vm.state.phase === 'preview' ? vm.previewRemaining : vm.turnRemaining}s</span>}
       </header>
 
       <section className="memory-arena">
@@ -59,22 +66,26 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
           avatar={vm.selectedAgent?.avatarByMood?.happy}
         />
 
-        <div className={`memory-board ${vm.isBusy ? 'agent-acting' : ''}`} aria-label="Memory card board">
-          {vm.state.cards.map(card => {
-            const revealed = vm.isRevealed(card.index)
-            return (
-              <button
-                key={card.index}
-                className={`memory-card ${revealed ? 'revealed' : ''} ${vm.isMatched(card.index) ? 'matched' : ''}`}
-                onClick={() => void vm.chooseCard(card.index)}
-                disabled={gameState.phase !== 'player_turn' || vm.isBusy || vm.isMatched(card.index)}
-                aria-label={revealed ? `Card ${card.index + 1}, value ${vm.cardValue(card.index)}` : `Hidden card ${card.index + 1}`}
-              >
-                <span className="memory-card-back"><Brain size={18} /></span>
-                <span className="memory-card-face">{revealed ? vm.cardValue(card.index) : ''}</span>
-              </button>
-            )
-          })}
+        <div className="memory-board-stage">
+          <MemoryStageNotice side="left" roomRemaining={vm.roomRemaining} previewRemaining={vm.previewRemaining} isRoomCountdown={vm.isRoomCountdown} showFlipWarning={vm.showFlipWarning} />
+          <div className={`memory-board ${vm.isBusy ? 'agent-acting' : ''}`} aria-label="Memory card board">
+            {vm.state.cards.map(card => {
+              const revealed = vm.isRevealed(card.index)
+              return (
+                <button
+                  key={card.index}
+                  className={`memory-card ${revealed ? 'revealed' : ''} ${vm.isMatched(card.index) ? 'matched' : ''}`}
+                  onClick={() => void vm.chooseCard(card.index)}
+                  disabled={gameState.phase !== 'player_turn' || vm.isBusy || vm.isMatched(card.index)}
+                  aria-label={revealed ? `Card ${card.index + 1}, value ${vm.cardValue(card.index)}` : `Hidden card ${card.index + 1}`}
+                >
+                  <span className="memory-card-back"><Brain size={18} /></span>
+                  <span className="memory-card-face">{revealed ? vm.cardValue(card.index) : ''}</span>
+                </button>
+              )
+            })}
+          </div>
+          <MemoryStageNotice side="right" roomRemaining={vm.roomRemaining} previewRemaining={vm.previewRemaining} isRoomCountdown={vm.isRoomCountdown} showFlipWarning={vm.showFlipWarning} />
         </div>
 
         <div className="player-station-wrap">
@@ -103,6 +114,16 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
         </div>
       )}
     </main>
+  )
+}
+
+function MemoryStageNotice({ side, roomRemaining, previewRemaining, isRoomCountdown, showFlipWarning }: { side: 'left' | 'right'; roomRemaining: number; previewRemaining: number; isRoomCountdown: boolean; showFlipWarning: boolean }) {
+  const visible = isRoomCountdown || showFlipWarning
+  return (
+    <aside className={`memory-stage-notice ${side} ${visible ? 'visible' : ''}`} aria-live="polite">
+      {isRoomCountdown && <><strong>The game will start soon.</strong><span>Remember the numbers!</span><b>{roomRemaining}s</b></>}
+      {showFlipWarning && <><strong>Cards will flip soon!</strong><span>Keep memorizing.</span><b>{previewRemaining}s</b></>}
+    </aside>
   )
 }
 

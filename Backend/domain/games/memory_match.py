@@ -10,7 +10,7 @@ from domain.agents.conversation import GameSkillTier
 
 CARD_COUNT = 36
 PAIR_COUNT = CARD_COUNT // 2
-PREVIEW_SECONDS = 10
+PREVIEW_SECONDS = 15
 TURN_SECONDS = 15
 
 
