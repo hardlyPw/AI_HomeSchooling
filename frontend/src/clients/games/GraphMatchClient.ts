@@ -18,6 +18,8 @@ export type QuickChatId = 'hello' | 'nice' | 'try_harder' | 'great_play' | 'clos
 
 export interface GraphAttempt {
   latex: string
+  graph_score: number
+  time_bonus: number
   score: number
   elapsed_ms: number
 }
@@ -37,11 +39,17 @@ export interface GraphMatchState {
     target_latex: string | null
     agent_latex: string | null
     agent_points: GraphPoint[]
+    agent_graph_score: number | null
+    agent_time_bonus: number | null
     agent_score: number | null
+    agent_elapsed_ms: number | null
     winner: 'user' | 'agent' | 'draw' | null
   }
+  rounds: GraphMatchState['current_round'][]
   user_round_wins: number
   agent_round_wins: number
+  user_total_score: number
+  agent_total_score: number
   completed: boolean
   overall_winner: 'user' | 'agent' | 'draw' | null
   quick_chats: Array<{ sender: 'user' | 'agent'; chat: QuickChatId; text: string }>

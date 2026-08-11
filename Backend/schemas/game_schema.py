@@ -29,6 +29,8 @@ class QuickChatRequest(BaseModel):
 
 class GraphAttemptResponse(BaseModel):
     latex: str
+    graph_score: float
+    time_bonus: float
     score: float
     elapsed_ms: int
 
@@ -42,7 +44,10 @@ class GraphRoundResponse(BaseModel):
     target_latex: str | None = None
     agent_latex: str | None = None
     agent_points: list[GraphPoint] = Field(default_factory=list)
+    agent_graph_score: float | None = None
+    agent_time_bonus: float | None = None
     agent_score: float | None = None
+    agent_elapsed_ms: int | None = None
     winner: str | None = None
 
 
@@ -59,8 +64,11 @@ class GraphMatchResponse(BaseModel):
     agent_skill: str
     round_count: int
     current_round: GraphRoundResponse
+    rounds: list[GraphRoundResponse]
     user_round_wins: int
     agent_round_wins: int
+    user_total_score: float
+    agent_total_score: float
     completed: bool
     overall_winner: str | None
     quick_chats: list[QuickChatEventResponse]

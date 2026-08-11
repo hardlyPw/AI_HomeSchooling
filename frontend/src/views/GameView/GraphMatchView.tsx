@@ -54,7 +54,7 @@ export default function GraphMatchView({ agents, onExit }: GraphMatchViewProps) 
               ))}
             </div>
             <div className="game-rule-strip">
-              <span>3 rounds</span><span>3 checks each</span><span>60 seconds</span>
+              <span>3 rounds</span><span>1 attempt each</span><span>60 seconds</span>
             </div>
             {vm.error && <p className="game-error">{vm.error}</p>}
             <button className="game-primary-button" onClick={() => void vm.start()} disabled={vm.isBusy || agents.length === 0}>
@@ -74,10 +74,23 @@ export default function GraphMatchView({ agents, onExit }: GraphMatchViewProps) 
         <section className="game-summary-content">
           <Trophy size={44} />
           <h2>{resultTitle}</h2>
-          <div className="final-score"><strong>{vm.state.user_round_wins}</strong><span>You · {vm.state.agent_name}</span><strong>{vm.state.agent_round_wins}</strong></div>
-          <div className="summary-formulas">
-            <span>Final target <MathFormula latex={round.target_latex ?? ''} /></span>
-            <span>Your best <MathFormula latex={round.attempts.at(-1)?.latex ?? ''} /></span>
+          <div className="final-score"><strong>{vm.state.user_total_score}</strong><span>You · {vm.state.agent_name}</span><strong>{vm.state.agent_total_score}</strong></div>
+          <div className="match-round-summary">
+            {vm.state.rounds.map(result => {
+              const attempt = result.attempts[0]
+              return (
+                <article key={result.number} className={`match-round-row ${result.winner ?? ''}`}>
+                  <div className="match-round-heading"><strong>Round {result.number}</strong><span>{result.winner === 'user' ? 'You won' : result.winner === 'agent' ? `${vm.state?.agent_name} won` : 'Draw'}</span></div>
+                  <div className="match-round-target"><span>Target</span><MathFormula latex={result.target_latex ?? ''} /></div>
+                  <div className="match-score-row">
+                    <span>You</span><MathFormula latex={attempt?.latex ?? ''} /><small>{formatSeconds(attempt?.elapsed_ms)} · {attempt?.graph_score} + {attempt?.time_bonus}</small><strong>{attempt?.score}</strong>
+                  </div>
+                  <div className="match-score-row agent">
+                    <span>{vm.state?.agent_name}</span><MathFormula latex={result.agent_latex ?? ''} /><small>{formatSeconds(result.agent_elapsed_ms)} · {result.agent_graph_score} + {result.agent_time_bonus}</small><strong>{result.agent_score}</strong>
+                  </div>
+                </article>
+              )
+            })}
           </div>
           <div className="summary-actions">
             <button className="game-secondary-button" onClick={onExit}><ArrowLeft size={17} /> Study hub</button>
@@ -129,17 +142,21 @@ export default function GraphMatchView({ agents, onExit }: GraphMatchViewProps) 
           <Stepper label="Horizontal shift" symbol="h" value={vm.input.horizontal_shift} onChange={value => vm.updateInput({ horizontal_shift: value })} />
           <Stepper label="Vertical shift" symbol="k" value={vm.input.vertical_shift} onChange={value => vm.updateInput({ vertical_shift: value })} />
 
-          {round.attempts.length > 0 && <div className="attempt-history">{round.attempts.map((attempt, index) => <span key={`${attempt.latex}-${index}`}><MathFormula latex={attempt.latex} /><strong>{attempt.score}</strong></span>)}</div>}
+          {round.attempts.length > 0 && <div className="attempt-history">{round.attempts.map((attempt, index) => <span key={`${attempt.latex}-${index}`}><MathFormula latex={attempt.latex} /><strong>{attempt.graph_score} + {attempt.time_bonus} = {attempt.score}</strong></span>)}</div>}
           {vm.error && <p className="game-error">{vm.error}</p>}
 
           {!round.completed ? (
             <button className="game-primary-button" onClick={() => void vm.submit()} disabled={vm.isBusy}>
-              <Send size={17} /> {vm.remainingSeconds === 0 ? 'Time is up · Submit' : `Check graph · ${round.attempts_remaining} left`}
+              <Send size={17} /> {vm.remainingSeconds === 0 ? 'Submitting...' : 'Submit graph'}
             </button>
           ) : (
             <div className="round-result">
               <span className={`round-winner ${round.winner}`}>{round.winner === 'user' ? 'You win this round' : round.winner === 'agent' ? `${vm.state.agent_name} wins this round` : 'Round draw'}</span>
-              <div><span>Target <MathFormula latex={round.target_latex ?? ''} /></span><span>{vm.state.agent_name} <MathFormula latex={round.agent_latex ?? ''} /> · {round.agent_score}</span></div>
+              <div className="round-score-breakdown">
+                <span>Target <MathFormula latex={round.target_latex ?? ''} /></span>
+                <span>You <strong>{round.attempts[0]?.graph_score} + {round.attempts[0]?.time_bonus} = {round.attempts[0]?.score}</strong></span>
+                <span>{vm.state.agent_name} <strong>{round.agent_graph_score} + {round.agent_time_bonus} = {round.agent_score}</strong></span>
+              </div>
               <button className="game-primary-button" onClick={() => void vm.advance()} disabled={vm.isBusy}>Next round <ChevronRight size={18} /></button>
             </div>
           )}
@@ -152,6 +169,11 @@ export default function GraphMatchView({ agents, onExit }: GraphMatchViewProps) 
       </footer>
     </main>
   )
+}
+
+function formatSeconds(elapsedMs: number | null | undefined) {
+  if (elapsedMs == null) return '-'
+  return `${(elapsedMs / 1000).toFixed(1)}s`
 }
 
 function Stepper({ label, symbol, value, onChange }: { label: string; symbol: string; value: number; onChange: (value: number) => void }) {

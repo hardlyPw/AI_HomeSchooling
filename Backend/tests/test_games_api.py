@@ -65,6 +65,9 @@ class GamesApiTest(unittest.TestCase):
         self.assertEqual(attempted.status_code, 200)
         self.assertTrue(attempted.json()["current_round"]["completed"])
         self.assertIsNotNone(attempted.json()["current_round"]["target_latex"])
+        self.assertEqual(attempted.json()["current_round"]["attempts"][0]["graph_score"], 100.0)
+        self.assertEqual(attempted.json()["current_round"]["attempts"][0]["time_bonus"], 9.8)
+        self.assertEqual(len(attempted.json()["rounds"]), 3)
 
 
 if __name__ == "__main__":

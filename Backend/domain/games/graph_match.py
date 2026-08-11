@@ -13,7 +13,9 @@ from domain.agents.conversation import GameSkillTier
 ALLOWED_BASES = (1 / 3, 1 / 2, 2.0, 3.0)
 MIN_SHIFT = -2
 MAX_SHIFT = 2
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 1
+ROUND_TIME_LIMIT_MS = 60_000
+MAX_TIME_BONUS = 10.0
 ROUND_COUNT = 3
 X_MIN = -4.0
 X_MAX = 4.0
@@ -115,9 +117,16 @@ def graph_similarity(target: GraphFunction, guess: GraphFunction) -> float:
     return round(max(0.0, 100.0 * (1.0 - 2.5 * mean_error)), 1)
 
 
+def time_bonus(elapsed_ms: int) -> float:
+    clamped = max(0, min(ROUND_TIME_LIMIT_MS, elapsed_ms))
+    return round(MAX_TIME_BONUS * (1.0 - clamped / ROUND_TIME_LIMIT_MS), 1)
+
+
 @dataclass(frozen=True)
 class GameAttempt:
     function: GraphFunction
+    graph_score: float
+    time_bonus: float
     score: float
     elapsed_ms: int
 
@@ -128,7 +137,10 @@ class GraphMatchRound:
     target: GraphFunction
     attempts: list[GameAttempt] = field(default_factory=list)
     agent_guess: GraphFunction | None = None
+    agent_graph_score: float | None = None
+    agent_time_bonus: float | None = None
     agent_score: float | None = None
+    agent_elapsed_ms: int | None = None
     winner: str | None = None
     completed: bool = False
 
@@ -143,6 +155,7 @@ class QuickChatEvent:
     chat: QuickChat
     text: str
     created_at: datetime
+    id: str = field(default_factory=lambda: uuid4().hex)
 
 
 @dataclass
@@ -158,6 +171,7 @@ class GraphMatchSession:
     completed: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
+    activity_memories: tuple[str, ...] = ()
 
     @classmethod
     def create(
@@ -193,6 +207,17 @@ class GraphMatchSession:
     def agent_round_wins(self) -> int:
         return sum(item.winner == "agent" for item in self.rounds)
 
+    @property
+    def user_total_score(self) -> float:
+        return round(
+            sum(item.best_attempt.score for item in self.rounds if item.best_attempt),
+            1,
+        )
+
+    @property
+    def agent_total_score(self) -> float:
+        return round(sum(item.agent_score or 0.0 for item in self.rounds), 1)
+
 
 def create_agent_guess(
     target: GraphFunction,
@@ -222,3 +247,13 @@ def create_agent_guess(
             current = int(values[name])
             values[name] = rng.choice(tuple(value for value in range(MIN_SHIFT, MAX_SHIFT + 1) if value != current))
     return GraphFunction(**values)
+
+
+def create_agent_elapsed_ms(skill: GameSkillTier, *, seed: str) -> int:
+    rng = random.Random(seed)
+    lower, upper = {
+        GameSkillTier.EASY: (35_000, 55_000),
+        GameSkillTier.NORMAL: (20_000, 40_000),
+        GameSkillTier.HARD: (8_000, 24_000),
+    }[skill]
+    return rng.randint(lower, upper)

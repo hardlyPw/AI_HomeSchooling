@@ -28,7 +28,7 @@ class GameActivityMemoryWriter:
     @staticmethod
     def _build_memories(session: GraphMatchSession) -> tuple[str, ...]:
         best_scores = [
-            round(best.score, 1)
+            round(best.graph_score, 1)
             for round_state in session.rounds
             if (best := round_state.best_attempt) is not None
         ]
@@ -36,15 +36,16 @@ class GameActivityMemoryWriter:
             return ()
 
         memories: list[str] = []
-        if session.user_round_wins >= 2:
+        if session.user_total_score > session.agent_total_score:
             memories.append(
-                f"The user beat {session.agent_name} {session.user_round_wins}-{session.agent_round_wins} "
-                "in a three-round Graph Match game about exponential functions."
+                f"The user beat {session.agent_name} {session.user_total_score}-{session.agent_total_score} "
+                "by total score in a three-round Graph Match game about exponential functions."
             )
-        elif session.agent_round_wins >= 2:
+        elif session.agent_total_score > session.user_total_score:
             memories.append(
                 f"The user played a full Graph Match game with {session.agent_name}; "
-                f"{session.agent_name} won {session.agent_round_wins}-{session.user_round_wins}."
+                f"{session.agent_name} won {session.agent_total_score}-{session.user_total_score} "
+                "by total score."
             )
 
         if max(best_scores) >= 99.9:

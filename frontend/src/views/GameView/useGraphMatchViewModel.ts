@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   graphMatchClient,
   type GraphFunctionInput,
@@ -55,6 +55,8 @@ export const useGraphMatchViewModel = (agents: AgentProfile[]): GraphMatchViewMo
   const [roundStartedAt, setRoundStartedAt] = useState(0)
   const [isBusy, setIsBusy] = useState(false)
   const [error, setError] = useState('')
+  const inputRef = useRef(input)
+  const submittedRoundRef = useRef('')
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 250)
     return () => window.clearInterval(timer)
@@ -82,17 +84,24 @@ export const useGraphMatchViewModel = (agents: AgentProfile[]): GraphMatchViewMo
 
   const submit = useCallback(async () => {
     if (!state || state.current_round.completed) return
-    await run(() => graphMatchClient.submitAttempt(state.id, {
-      ...input,
+    const roundKey = `${state.id}:${state.current_round.number}`
+    if (submittedRoundRef.current === roundKey) return
+    submittedRoundRef.current = roundKey
+    const next = await run(() => graphMatchClient.submitAttempt(state.id, {
+      ...inputRef.current,
       elapsed_ms: Math.min(ROUND_SECONDS * 1000, Date.now() - roundStartedAt),
     }))
-  }, [input, roundStartedAt, run, state])
+    if (!next) submittedRoundRef.current = ''
+  }, [roundStartedAt, run, state])
 
   const advance = async () => {
     if (!state) return
     const next = await run(() => graphMatchClient.advance(state.id))
     if (next) {
-      setInput({ coefficient: 1, base: 2, horizontal_shift: 0, vertical_shift: 0 })
+      const initialInput: GraphFunctionInput = { coefficient: 1, base: 2, horizontal_shift: 0, vertical_shift: 0 }
+      inputRef.current = initialInput
+      setInput(initialInput)
+      submittedRoundRef.current = ''
       setRoundStartedAt(Date.now())
     }
   }
@@ -101,13 +110,24 @@ export const useGraphMatchViewModel = (agents: AgentProfile[]): GraphMatchViewMo
     ? ROUND_SECONDS
     : Math.max(0, ROUND_SECONDS - Math.floor((now - roundStartedAt) / 1000))
 
+  useEffect(() => {
+    if (!state || state.current_round.completed || roundStartedAt === 0) return
+    const delay = Math.max(0, roundStartedAt + ROUND_SECONDS * 1000 - Date.now())
+    const timeout = window.setTimeout(() => void submit(), delay)
+    return () => window.clearTimeout(timeout)
+  }, [roundStartedAt, state, submit])
+
   return {
     agents,
     selectedAgentId,
     setSelectedAgentId,
     state,
     input,
-    updateInput: values => setInput(current => ({ ...current, ...values })),
+    updateInput: values => setInput(current => {
+      const next = { ...current, ...values }
+      inputRef.current = next
+      return next
+    }),
     playerPoints: useMemo(() => functionPoints(input), [input]),
     formula: useMemo(() => formulaLatex(input), [input]),
     remainingSeconds,
