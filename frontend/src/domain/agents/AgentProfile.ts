@@ -8,6 +8,7 @@ export interface AgentProfile {
   entryLabel: string
   initialAffinity: number
   gameSkillTier: GameSkillTier
+  isOnline: boolean
   chatEndpoint: string
   historyEndpoint?: string
   stateEndpoint?: string

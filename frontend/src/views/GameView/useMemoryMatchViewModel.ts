@@ -4,6 +4,9 @@ import type { AgentProfile } from '../../domain/agents/AgentProfile'
 
 const wait = (duration: number) => new Promise(resolve => window.setTimeout(resolve, duration))
 const ROOM_READY_SECONDS = 10
+const ACCEPTED_MODAL_MS = 1800
+
+type ChallengeDecision = 'accepted' | 'rejected' | null
 
 export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id ?? 'jiho')
@@ -16,6 +19,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const [now, setNow] = useState(0)
   const [isBusy, setIsBusy] = useState(false)
   const [challengePending, setChallengePending] = useState(false)
+  const [challengeDecision, setChallengeDecision] = useState<ChallengeDecision>(null)
   const [isRoomCountdown, setIsRoomCountdown] = useState(false)
   const [error, setError] = useState('')
   const [quickMenuOpen, setQuickMenuOpen] = useState(false)
@@ -27,10 +31,12 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const userBubbleTimer = useRef<number | null>(null)
   const agentReplyTimer = useRef<number | null>(null)
   const agentBubbleTimer = useRef<number | null>(null)
+  const challengeRequestId = useRef(0)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 200)
     return () => {
+      challengeRequestId.current += 1
       window.clearInterval(timer)
       if (userBubbleTimer.current !== null) window.clearTimeout(userBubbleTimer.current)
       if (agentReplyTimer.current !== null) window.clearTimeout(agentReplyTimer.current)
@@ -48,17 +54,32 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   }, [])
 
   const start = async () => {
+    const selectedAgent = agents.find(agent => agent.id === selectedAgentId)
+    if (!selectedAgent) return
+    const requestId = challengeRequestId.current + 1
+    challengeRequestId.current = requestId
     setIsBusy(true)
     setChallengePending(true)
+    setChallengeDecision(null)
     setError('')
     try {
       const challengeDelay = 3000 + Math.floor(Math.random() * 2001)
-      const [next] = await Promise.all([
-        gameClient.startMemoryMatch(selectedAgentId),
-        wait(challengeDelay),
-      ])
+      if (!selectedAgent.isOnline) {
+        await wait(challengeDelay)
+        if (requestId !== challengeRequestId.current) return
+        setChallengePending(false)
+        setChallengeDecision('rejected')
+        return
+      }
+      const [next] = await Promise.all([gameClient.startMemoryMatch(selectedAgentId), wait(challengeDelay)])
+      if (requestId !== challengeRequestId.current) return
+      setChallengePending(false)
+      setChallengeDecision('accepted')
+      await wait(ACCEPTED_MODAL_MS)
+      if (requestId !== challengeRequestId.current) return
       boardValues.current = next.cards.map(card => card.value ?? 0)
       setState(next)
+      setChallengeDecision(null)
       setIsRoomCountdown(true)
       setDisplayAgentScore(0)
       setSelectedCards([])
@@ -67,11 +88,19 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
       setNow(startedAt)
       setPhaseStartedAt(startedAt)
     } catch (requestError) {
+      setChallengeDecision(null)
       setError(requestError instanceof Error ? requestError.message : 'Could not start Memory Match.')
     } finally {
-      setChallengePending(false)
-      setIsBusy(false)
+      if (requestId === challengeRequestId.current) {
+        setChallengePending(false)
+        setIsBusy(false)
+      }
     }
+  }
+
+  const dismissRejectedChallenge = () => {
+    if (challengeDecision !== 'rejected') return
+    setChallengeDecision(null)
   }
 
   const roomRemaining = state?.phase === 'preview' && isRoomCountdown
@@ -212,6 +241,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     state,
     isBusy,
     challengePending,
+    challengeDecision,
     error,
     isRoomCountdown,
     roomRemaining,
@@ -224,6 +254,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     userBubble,
     agentBubble,
     start,
+    dismissRejectedChallenge,
     chooseCard,
     sendQuickChat,
     cardValue: (index: number) => boardValues.current[index] ?? null,
