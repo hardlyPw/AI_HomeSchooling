@@ -60,6 +60,7 @@ class ConversationAgentProfile:
     persona: ConversationPersonaConfig
     initial_affinity: int
     game_skill_tier: GameSkillTier = GameSkillTier.NORMAL
+    is_online: bool = True
     affinity_min: int = 0
     affinity_max: int = 100
     capabilities: frozenset[ConversationCapability] = field(default_factory=frozenset)

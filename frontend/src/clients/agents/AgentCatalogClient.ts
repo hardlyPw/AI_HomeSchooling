@@ -9,6 +9,7 @@ export interface AgentSummaryResponse {
   description: string
   initial_affinity: number
   game_skill_tier: GameSkillTier
+  is_online?: boolean
   capabilities: string[]
   is_builtin: boolean
 }
@@ -46,6 +47,7 @@ const toProfile = (agent: AgentSummaryResponse): AgentProfile => {
     entryLabel: `Talk with ${agent.name}`,
     initialAffinity: agent.initial_affinity,
     gameSkillTier: agent.game_skill_tier,
+    isOnline: agent.is_online ?? true,
     chatEndpoint: `${root}/chat/stream`,
     historyEndpoint: `${root}/history`,
     stateEndpoint: `${root}/state`,

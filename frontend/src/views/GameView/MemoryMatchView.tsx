@@ -1,4 +1,4 @@
-import { ArrowLeft, Brain, Check, Clock3, LoaderCircle, MessageCircle, Play, RotateCcw, UserRound } from 'lucide-react'
+import { ArrowLeft, Brain, Check, CheckCircle2, Clock3, LoaderCircle, MessageCircle, Play, RotateCcw, UserRound, XCircle } from 'lucide-react'
 import type { AgentProfile } from '../../domain/agents/AgentProfile'
 import { useMemoryMatchViewModel } from './useMemoryMatchViewModel'
 
@@ -25,9 +25,9 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
             <h2>Choose your opponent</h2>
             <div className="opponent-list" role="radiogroup" aria-label="Opponent">
               {agents.map(agent => (
-                <button key={agent.id} className={vm.selectedAgentId === agent.id ? 'opponent-option simple selected' : 'opponent-option simple'} onClick={() => vm.setSelectedAgentId(agent.id)} role="radio" aria-checked={vm.selectedAgentId === agent.id} disabled={vm.challengePending}>
+                <button key={agent.id} className={vm.selectedAgentId === agent.id ? 'opponent-option simple selected' : 'opponent-option simple'} onClick={() => vm.setSelectedAgentId(agent.id)} role="radio" aria-checked={vm.selectedAgentId === agent.id} disabled={vm.isBusy}>
                   <span className="opponent-avatar">{agent.avatarByMood?.happy ? <img src={agent.avatarByMood.happy} alt="" /> : <Brain size={22} />}</span>
-                  <strong>{agent.name}</strong>
+                  <span className="opponent-name"><strong>{agent.name}</strong><small className={`agent-presence ${agent.isOnline ? 'online' : 'offline'}`}><i />{agent.isOnline ? 'Online' : 'Offline'}</small></span>
                   {vm.selectedAgentId === agent.id && <Check size={20} aria-hidden="true" />}
                 </button>
               ))}
@@ -43,6 +43,17 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
             )}
           </div>
         </section>
+        {vm.challengeDecision && (
+          <div className={`challenge-result-backdrop ${vm.challengeDecision}`} onClick={vm.dismissRejectedChallenge} role="presentation">
+            <section className="challenge-result-dialog" role="dialog" aria-modal="true" aria-labelledby="challenge-result-title" onClick={event => event.stopPropagation()}>
+              {vm.challengeDecision === 'accepted' ? <CheckCircle2 size={38} /> : <XCircle size={38} />}
+              <h2 id="challenge-result-title">{vm.selectedAgent?.name} {vm.challengeDecision === 'accepted' ? 'accepted your challenge.' : 'declined your challenge.'}</h2>
+              <p>{vm.challengeDecision === 'accepted' ? 'Entering the game...' : 'This Agent is currently offline.'}</p>
+              {vm.challengeDecision === 'accepted' && <LoaderCircle className="challenge-result-spinner" size={20} />}
+              {vm.challengeDecision === 'rejected' && <small>Click outside to close</small>}
+            </section>
+          </div>
+        )}
       </main>
     )
   }

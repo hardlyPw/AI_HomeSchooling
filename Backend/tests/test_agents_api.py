@@ -83,9 +83,11 @@ class AgentsApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["id"], "mina")
         self.assertEqual(response.json()["game_skill_tier"], "easy")
+        self.assertTrue(response.json()["is_online"])
         listed = self.client.get("/api/v1/agents")
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["agents"][0]["name"], "Mina")
+        self.assertTrue(listed.json()["agents"][0]["is_online"])
 
     def test_invalid_request_is_rejected_before_designer(self) -> None:
         response = self.client.post("/api/v1/agents", json={

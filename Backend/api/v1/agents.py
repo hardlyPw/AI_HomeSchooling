@@ -37,6 +37,7 @@ def _to_summary(
         description=definition.profile.description,
         initial_affinity=definition.profile.initial_affinity,
         game_skill_tier=definition.profile.game_skill_tier.value,
+        is_online=definition.profile.is_online,
         capabilities=sorted(capability.value for capability in definition.profile.capabilities),
         is_builtin=service.is_protected(definition.profile.agent_id),
     )
