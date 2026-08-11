@@ -8,7 +8,7 @@ from infrastructure.storage.namespaced_conversation_memory import (
 
 
 class GameActivityMemoryWriter:
-    """Projects notable game outcomes into Agent long-term memory."""
+    """Projects notable outcomes into memory without changing affinity."""
 
     def __init__(self, memory_store: NamespacedConversationMemoryStore) -> None:
         self._memory_store = memory_store

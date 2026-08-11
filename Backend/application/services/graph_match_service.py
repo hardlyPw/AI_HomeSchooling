@@ -27,6 +27,8 @@ class GraphMatchStateError(ValueError):
 
 
 class GraphMatchService:
+    """Runs competitive matches without changing Agent affinity."""
+
     def __init__(
         self,
         repository: GraphMatchRepository,
