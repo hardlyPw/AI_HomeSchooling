@@ -60,3 +60,16 @@ create index if not exists graph_match_sessions_user_created_idx
 
 create index if not exists graph_match_quick_chats_session_created_idx
     on public.graph_match_quick_chats (session_id, created_at);
+
+create table if not exists public.game_leaderboard_scores (
+    id text primary key,
+    game_id text not null check (game_id in ('graph_challenge', 'memory_match')),
+    user_id text not null,
+    player_name text not null,
+    score numeric(7, 1) not null,
+    detail text not null default '',
+    played_at timestamptz not null
+);
+
+create index if not exists game_leaderboard_rank_idx
+    on public.game_leaderboard_scores (game_id, score desc, played_at asc);

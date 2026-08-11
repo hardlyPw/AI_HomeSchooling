@@ -16,6 +16,9 @@ from application.services.agent_catalog_service import (
 )
 from application.services.friend_chat_service import FriendChatService
 from application.services.graph_match_service import GraphMatchService
+from application.services.graph_challenge_service import GraphChallengeService
+from application.services.leaderboard_service import LeaderboardService
+from application.services.memory_match_service import MemoryMatchService
 from application.services.lesson_chat_service import LessonChatService
 from application.services.autorater_service import AutoraterService
 from domain.agents.jiho import JIHO_DEFINITION
@@ -129,6 +132,50 @@ def _get_graph_match_repository():
     )
 
 
+@lru_cache(maxsize=1)
+def _get_score_repository():
+    from infrastructure.repositories.in_memory_game_repository import InMemoryScoreRepository
+
+    load_dotenv(BACKEND_DIR / ".env")
+    if os.getenv("GAME_SCORE_STORAGE", "supabase").strip().lower() == "memory":
+        return InMemoryScoreRepository()
+
+    from infrastructure.repositories.resilient_score_repository import ResilientScoreRepository
+    from infrastructure.repositories.supabase_score_repository import SupabaseScoreRepository
+    from supabase import create_client
+
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = os.getenv("SUPABASE_KEY", "").strip()
+    if not supabase_url or not supabase_key:
+        return InMemoryScoreRepository()
+    return ResilientScoreRepository(
+        SupabaseScoreRepository(create_client(supabase_url, supabase_key))
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_leaderboard_service() -> LeaderboardService:
+    return LeaderboardService(_get_score_repository())
+
+
+@lru_cache(maxsize=1)
+def _get_graph_challenge_service() -> GraphChallengeService:
+    from infrastructure.repositories.in_memory_game_repository import InMemoryGraphChallengeRepository
+
+    return GraphChallengeService(InMemoryGraphChallengeRepository(), _get_leaderboard_service())
+
+
+@lru_cache(maxsize=1)
+def _get_memory_match_service() -> MemoryMatchService:
+    from infrastructure.repositories.in_memory_game_repository import InMemoryMemoryMatchRepository
+
+    return MemoryMatchService(
+        InMemoryMemoryMatchRepository(),
+        _get_agent_catalog_service(),
+        _get_leaderboard_service(),
+    )
+
+
 def _create_configurable_agent_service(definition, user_id: str) -> FriendChatService:
     from infrastructure.adapters.configurable_conversation_agent import (
         ConfigurableConversationAgent,
@@ -215,6 +262,18 @@ def get_agent_catalog_service() -> AgentCatalogService:
 
 def get_graph_match_service() -> GraphMatchService:
     return _get_graph_match_service()
+
+
+def get_graph_challenge_service() -> GraphChallengeService:
+    return _get_graph_challenge_service()
+
+
+def get_memory_match_service() -> MemoryMatchService:
+    return _get_memory_match_service()
+
+
+def get_leaderboard_service() -> LeaderboardService:
+    return _get_leaderboard_service()
 
 
 def get_agent_chat_service(

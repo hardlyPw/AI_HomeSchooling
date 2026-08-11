@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
+from api.v1.game_routes.graph_challenge import router as graph_challenge_router
+from api.v1.game_routes.leaderboards import router as leaderboard_router
+from api.v1.game_routes.memory_match import router as memory_match_router
 from application.dependencies import get_graph_match_service
 from application.services.agent_catalog_service import AgentNotFoundError
 from application.services.graph_match_service import (
@@ -163,3 +166,8 @@ def send_graph_match_quick_chat(
         )
     except Exception as exc:
         _handle_game_error(exc)
+
+
+router.include_router(graph_challenge_router)
+router.include_router(memory_match_router)
+router.include_router(leaderboard_router)

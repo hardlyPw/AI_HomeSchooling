@@ -44,7 +44,7 @@ export default function HomeView({ vm }: HomeViewProps) {
             <Gamepad2 size={22} />
             <span>
               <strong>Play a game</strong>
-              <small>Match exponential graphs with an Agent</small>
+              <small>Solo challenges, Agent duels, and rankings</small>
             </span>
           </button>
         </div>
