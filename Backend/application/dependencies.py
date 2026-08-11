@@ -94,14 +94,38 @@ def _get_agent_catalog_service() -> AgentCatalogService:
 @lru_cache(maxsize=1)
 def _get_graph_match_service() -> GraphMatchService:
     from infrastructure.adapters.game_activity_memory import GameActivityMemoryWriter
-    from infrastructure.repositories.in_memory_graph_match_repository import (
-        InMemoryGraphMatchRepository,
-    )
 
     return GraphMatchService(
-        InMemoryGraphMatchRepository(),
+        _get_graph_match_repository(),
         _get_agent_catalog_service(),
         GameActivityMemoryWriter(_get_agent_memory_store()),
+    )
+
+
+@lru_cache(maxsize=1)
+def _get_graph_match_repository():
+    load_dotenv(BACKEND_DIR / ".env")
+    if os.getenv("GRAPH_MATCH_STORAGE", "supabase").strip().lower() == "memory":
+        from infrastructure.repositories.in_memory_graph_match_repository import (
+            InMemoryGraphMatchRepository,
+        )
+
+        return InMemoryGraphMatchRepository()
+
+    from infrastructure.repositories.supabase_graph_match_repository import (
+        SupabaseGraphMatchRepository,
+    )
+    from infrastructure.repositories.resilient_graph_match_repository import (
+        ResilientGraphMatchRepository,
+    )
+    from supabase import create_client
+
+    supabase_url = os.getenv("SUPABASE_URL", "").strip()
+    supabase_key = os.getenv("SUPABASE_KEY", "").strip()
+    if not supabase_url or not supabase_key:
+        raise ValueError("SUPABASE_URL and SUPABASE_KEY must be configured in Backend/.env")
+    return ResilientGraphMatchRepository(
+        SupabaseGraphMatchRepository(create_client(supabase_url, supabase_key))
     )
 
 

@@ -15,6 +15,7 @@ from domain.games.graph_match import (
     GraphMatchSession,
     create_agent_guess,
     graph_similarity,
+    time_bonus,
 )
 
 
@@ -54,6 +55,12 @@ class GraphMatchDomainTest(unittest.TestCase):
 
         self.assertEqual(len(session.rounds), 3)
         self.assertEqual(len({item.target for item in session.rounds}), 3)
+
+    def test_time_bonus_decreases_to_zero_over_sixty_seconds(self) -> None:
+        self.assertEqual(time_bonus(0), 10.0)
+        self.assertEqual(time_bonus(30_000), 5.0)
+        self.assertEqual(time_bonus(60_000), 0.0)
+        self.assertEqual(time_bonus(90_000), 0.0)
 
 
 if __name__ == "__main__":

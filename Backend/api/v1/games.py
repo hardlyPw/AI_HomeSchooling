@@ -34,10 +34,9 @@ def _points(function) -> list[GraphPoint]:
 
 
 def _to_response(session) -> GraphMatchResponse:
-    round_state = session.current_round
-    if session.user_round_wins > session.agent_round_wins:
+    if session.user_total_score > session.agent_total_score:
         overall_winner = "user"
-    elif session.user_round_wins < session.agent_round_wins:
+    elif session.user_total_score < session.agent_total_score:
         overall_winner = "agent"
     else:
         overall_winner = "draw"
@@ -47,33 +46,45 @@ def _to_response(session) -> GraphMatchResponse:
         agent_name=session.agent_name,
         agent_skill=session.agent_skill.value,
         round_count=len(session.rounds),
-        current_round=GraphRoundResponse(
-            number=round_state.number,
-            target_points=_points(round_state.target),
-            attempts=[
-                GraphAttemptResponse(
-                    latex=attempt.function.to_latex(),
-                    score=attempt.score,
-                    elapsed_ms=attempt.elapsed_ms,
-                )
-                for attempt in round_state.attempts
-            ],
-            attempts_remaining=MAX_ATTEMPTS - len(round_state.attempts),
-            completed=round_state.completed,
-            target_latex=round_state.target.to_latex() if round_state.completed else None,
-            agent_latex=round_state.agent_guess.to_latex() if round_state.agent_guess else None,
-            agent_points=_points(round_state.agent_guess) if round_state.agent_guess else [],
-            agent_score=round_state.agent_score,
-            winner=round_state.winner,
-        ),
+        current_round=_to_round_response(session.current_round),
+        rounds=[_to_round_response(round_state) for round_state in session.rounds],
         user_round_wins=session.user_round_wins,
         agent_round_wins=session.agent_round_wins,
+        user_total_score=session.user_total_score,
+        agent_total_score=session.agent_total_score,
         completed=session.completed,
         overall_winner=overall_winner if session.completed else None,
         quick_chats=[
             QuickChatEventResponse(sender=event.sender, chat=event.chat.value, text=event.text)
             for event in session.quick_chats[-6:]
         ],
+    )
+
+
+def _to_round_response(round_state) -> GraphRoundResponse:
+    return GraphRoundResponse(
+        number=round_state.number,
+        target_points=_points(round_state.target),
+        attempts=[
+            GraphAttemptResponse(
+                latex=attempt.function.to_latex(),
+                graph_score=attempt.graph_score,
+                time_bonus=attempt.time_bonus,
+                score=attempt.score,
+                elapsed_ms=attempt.elapsed_ms,
+            )
+            for attempt in round_state.attempts
+        ],
+        attempts_remaining=MAX_ATTEMPTS - len(round_state.attempts),
+        completed=round_state.completed,
+        target_latex=round_state.target.to_latex() if round_state.completed else None,
+        agent_latex=round_state.agent_guess.to_latex() if round_state.agent_guess else None,
+        agent_points=_points(round_state.agent_guess) if round_state.agent_guess else [],
+        agent_graph_score=round_state.agent_graph_score,
+        agent_time_bonus=round_state.agent_time_bonus,
+        agent_score=round_state.agent_score,
+        agent_elapsed_ms=round_state.agent_elapsed_ms,
+        winner=round_state.winner,
     )
 
 

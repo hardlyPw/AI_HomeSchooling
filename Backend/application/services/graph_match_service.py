@@ -13,7 +13,9 @@ from domain.games.graph_match import (
     QuickChat,
     QuickChatEvent,
     create_agent_guess,
+    create_agent_elapsed_ms,
     graph_similarity,
+    time_bonus,
 )
 from domain.games.repository import GameActivityMemory, GraphMatchRepository
 
@@ -75,12 +77,18 @@ class GraphMatchService:
             if len(round_state.attempts) >= MAX_ATTEMPTS:
                 raise GraphMatchStateError("No attempts remain in this round")
 
-            score = graph_similarity(round_state.target, function)
+            graph_score = graph_similarity(round_state.target, function)
+            bonus = time_bonus(elapsed_ms)
             round_state.attempts.append(
-                GameAttempt(function=function, score=score, elapsed_ms=max(0, elapsed_ms))
+                GameAttempt(
+                    function=function,
+                    graph_score=graph_score,
+                    time_bonus=bonus,
+                    score=round(graph_score + bonus, 1),
+                    elapsed_ms=max(0, elapsed_ms),
+                )
             )
-            if score >= 99.9 or len(round_state.attempts) == MAX_ATTEMPTS or elapsed_ms >= 60_000:
-                self._complete_round(session)
+            self._complete_round(session)
             self._repository.save(session)
             return session
 
@@ -123,7 +131,16 @@ class GraphMatchService:
             seed=f"{session.id}:{round_state.number}",
         )
         round_state.agent_guess = agent_guess
-        round_state.agent_score = graph_similarity(round_state.target, agent_guess)
+        round_state.agent_elapsed_ms = create_agent_elapsed_ms(
+            session.agent_skill,
+            seed=f"{session.id}:{round_state.number}:time",
+        )
+        round_state.agent_graph_score = graph_similarity(round_state.target, agent_guess)
+        round_state.agent_time_bonus = time_bonus(round_state.agent_elapsed_ms)
+        round_state.agent_score = round(
+            round_state.agent_graph_score + round_state.agent_time_bonus,
+            1,
+        )
         user_score = round_state.best_attempt.score if round_state.best_attempt else 0.0
         if user_score > round_state.agent_score:
             round_state.winner = "user"
@@ -147,4 +164,4 @@ class GraphMatchService:
         if session.current_round_index == len(session.rounds) - 1:
             session.completed = True
             session.completed_at = datetime.now(timezone.utc)
-            self._activity_memory.record(session)
+            session.activity_memories = self._activity_memory.record(session)

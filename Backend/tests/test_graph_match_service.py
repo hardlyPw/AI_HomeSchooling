@@ -58,6 +58,23 @@ class GraphMatchServiceTest(unittest.TestCase):
         with self.assertRaises(GraphMatchStateError):
             self.service.advance(session.id, user_id="demo-user")
 
+    def test_first_attempt_always_completes_round_with_time_bonus(self) -> None:
+        session = self.service.start(agent_id="jiho", user_id="demo-user")
+
+        session = self.service.submit_attempt(
+            session.id,
+            user_id="demo-user",
+            function=session.current_round.target,
+            elapsed_ms=30_000,
+        )
+
+        attempt = session.current_round.attempts[0]
+        self.assertTrue(session.current_round.completed)
+        self.assertEqual(attempt.graph_score, 100.0)
+        self.assertEqual(attempt.time_bonus, 5.0)
+        self.assertEqual(attempt.score, 105.0)
+        self.assertIsNotNone(session.current_round.agent_elapsed_ms)
+
     def test_activity_writer_limits_notable_memories_to_two(self) -> None:
         session = self.service.start(agent_id="jiho", user_id="demo-user")
         for round_index in range(3):
@@ -74,6 +91,7 @@ class GraphMatchServiceTest(unittest.TestCase):
 
         self.assertEqual(len(memories), 2)
         self.assertIn("beat Jiho", memories[0])
+        self.assertIn("by total score", memories[0])
         self.assertIn("exactly matched", memories[1])
 
 
