@@ -16,9 +16,11 @@ def get_leaderboard(
     game_id: GameId,
     service: LeaderboardService = Depends(get_leaderboard_service),
 ) -> LeaderboardResponse:
-    entries = service.list(game_id)
+    is_match_history = game_id == GameId.MEMORY_MATCH
+    entries = service.list_recent(game_id) if is_match_history else service.list(game_id)
     return LeaderboardResponse(
         game_id=game_id.value,
+        view_mode="match_history" if is_match_history else "ranking",
         entries=[
             LeaderboardEntryResponse(
                 rank=index + 1,

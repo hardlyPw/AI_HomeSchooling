@@ -21,10 +21,27 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const boardValues = useRef<number[]>([])
   const selectedCardsRef = useRef<number[]>([])
   const actionInFlight = useRef(false)
+  const userBubbleTimer = useRef<number | null>(null)
+  const agentReplyTimer = useRef<number | null>(null)
+  const agentBubbleTimer = useRef<number | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 200)
-    return () => window.clearInterval(timer)
+    return () => {
+      window.clearInterval(timer)
+      if (userBubbleTimer.current !== null) window.clearTimeout(userBubbleTimer.current)
+      if (agentReplyTimer.current !== null) window.clearTimeout(agentReplyTimer.current)
+      if (agentBubbleTimer.current !== null) window.clearTimeout(agentBubbleTimer.current)
+    }
+  }, [])
+
+  const showAgentBubble = useCallback((text: string) => {
+    if (agentBubbleTimer.current !== null) window.clearTimeout(agentBubbleTimer.current)
+    setAgentBubble(text)
+    agentBubbleTimer.current = window.setTimeout(() => {
+      setAgentBubble('')
+      agentBubbleTimer.current = null
+    }, 3000)
   }, [])
 
   const start = async () => {
@@ -69,7 +86,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
   const animateAgentTurns = useCallback(async (turns: AgentCardTurn[]) => {
     for (const turn of turns) {
       setAgentReveal({ [turn.indices[0]]: turn.values[0], [turn.indices[1]]: turn.values[1] })
-      setAgentBubble(turn.matched ? 'Found one!' : 'Your turn!')
+      showAgentBubble(turn.matched ? 'Found one!' : 'Your turn!')
       await wait(750)
       if (turn.matched) {
         setTemporaryMatches(current => [...current, ...turn.indices])
@@ -79,7 +96,7 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
       setAgentReveal({})
       if (!turn.matched) await wait(250)
     }
-  }, [])
+  }, [showAgentBubble])
 
   const applyServerTurn = useCallback(async (request: Promise<MemoryMatchState>) => {
     setIsBusy(true)
@@ -113,7 +130,13 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     if (nextSelection.length < 2) return
     actionInFlight.current = true
     setIsBusy(true)
+    const isMatch = boardValues.current[nextSelection[0]] === boardValues.current[nextSelection[1]]
     await wait(550)
+    if (!isMatch) {
+      setSelectedCards([])
+      selectedCardsRef.current = []
+      await wait(420)
+    }
     await applyServerTurn(gameClient.playMemoryCards(state.id, [nextSelection[0], nextSelection[1]]))
   }
 
@@ -131,7 +154,14 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
     setQuickMenuOpen(false)
     setUserBubble(text)
     setAgentBubble('')
-    window.setTimeout(() => {
+    if (userBubbleTimer.current !== null) window.clearTimeout(userBubbleTimer.current)
+    if (agentReplyTimer.current !== null) window.clearTimeout(agentReplyTimer.current)
+    if (agentBubbleTimer.current !== null) window.clearTimeout(agentBubbleTimer.current)
+    userBubbleTimer.current = window.setTimeout(() => {
+      setUserBubble('')
+      userBubbleTimer.current = null
+    }, 3000)
+    agentReplyTimer.current = window.setTimeout(() => {
       const replies: Record<string, string> = {
         'Good luck!': 'You too!',
         'Nice one!': 'Thanks!',
@@ -139,7 +169,8 @@ export const useMemoryMatchViewModel = (agents: AgentProfile[]) => {
         'So close!': 'That was close!',
         'Good game!': 'Good game!',
       }
-      setAgentBubble(replies[text] ?? 'Let’s go!')
+      showAgentBubble(replies[text] ?? "Let's go!")
+      agentReplyTimer.current = null
     }, 900)
   }
 

@@ -21,3 +21,6 @@ class LeaderboardService:
 
     def list(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
         return self._repository.list(game_id, limit)
+
+    def list_recent(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
+        return self._repository.list_recent(game_id, limit)

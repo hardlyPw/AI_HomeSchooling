@@ -49,3 +49,8 @@ class InMemoryScoreRepository:
         with self._lock:
             entries = [item for item in self._entries if item.game_id == game_id]
             return sorted(entries, key=lambda item: (-item.score, item.played_at))[:limit]
+
+    def list_recent(self, game_id: GameId, limit: int = 20) -> list[ScoreEntry]:
+        with self._lock:
+            entries = [item for item in self._entries if item.game_id == game_id]
+            return sorted(entries, key=lambda item: item.played_at, reverse=True)[:limit]

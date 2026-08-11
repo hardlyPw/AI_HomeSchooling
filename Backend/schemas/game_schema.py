@@ -157,4 +157,5 @@ class LeaderboardEntryResponse(BaseModel):
 
 class LeaderboardResponse(BaseModel):
     game_id: str
+    view_mode: str
     entries: list[LeaderboardEntryResponse]

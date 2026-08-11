@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 import sys
 import unittest
 
@@ -14,7 +15,7 @@ from application.services.graph_challenge_service import GraphChallengeService
 from application.services.leaderboard_service import LeaderboardService
 from application.services.memory_match_service import MemoryMatchService
 from domain.agents.jiho import JIHO_DEFINITION
-from domain.games.leaderboard import GameId
+from domain.games.leaderboard import GameId, ScoreEntry
 from domain.games.math_expression import MathExpression
 from infrastructure.repositories.in_memory_agent_repository import InMemoryConversationAgentRepository
 from infrastructure.repositories.in_memory_game_repository import (
@@ -124,6 +125,31 @@ class CurrentGameServiceTest(unittest.TestCase):
         self.assertEqual(session.user_score, 18)
         entries = self.leaderboard.list(GameId.MEMORY_MATCH)
         self.assertEqual(entries[0].score, 18)
+        self.assertTrue(entries[0].detail.startswith("Won 18-"))
+
+    def test_solo_scores_rank_highest_while_match_history_lists_newest(self) -> None:
+        now = datetime.now(timezone.utc)
+        older_high_score = ScoreEntry(
+            game_id=GameId.MEMORY_MATCH,
+            user_id="demo-user",
+            player_name="You",
+            score=12,
+            detail="Won 12-6 vs Jiho",
+            played_at=now - timedelta(hours=1),
+        )
+        newer_low_score = ScoreEntry(
+            game_id=GameId.MEMORY_MATCH,
+            user_id="demo-user",
+            player_name="You",
+            score=7,
+            detail="Lost 7-11 vs Jiho",
+            played_at=now,
+        )
+        self.scores.save(older_high_score)
+        self.scores.save(newer_low_score)
+
+        self.assertEqual(self.leaderboard.list(GameId.MEMORY_MATCH)[0].id, older_high_score.id)
+        self.assertEqual(self.leaderboard.list_recent(GameId.MEMORY_MATCH)[0].id, newer_low_score.id)
 
 
 if __name__ == "__main__":

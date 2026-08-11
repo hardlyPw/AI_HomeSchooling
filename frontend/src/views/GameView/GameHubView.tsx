@@ -1,4 +1,4 @@
-import { ArrowLeft, Brain, ChevronRight, FunctionSquare, Gamepad2, Medal, Trophy } from 'lucide-react'
+import { ArrowLeft, Brain, ChevronRight, FunctionSquare, Gamepad2, History as HistoryIcon, Medal, Trophy } from 'lucide-react'
 import type { AgentProfile } from '../../domain/agents/AgentProfile'
 import GraphChallengeView from './GraphChallengeView'
 import MemoryMatchView from './MemoryMatchView'
@@ -8,6 +8,13 @@ interface GameHubViewProps {
   agents: AgentProfile[]
   onExit: () => void
 }
+
+const historyDateFormatter = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 export default function GameHubView({ agents, onExit }: GameHubViewProps) {
   const vm = useGameHubViewModel()
@@ -21,7 +28,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
         <div><span className="game-eyebrow">AI HomeSchooling</span><h1>Game room</h1></div>
         <div className="game-hub-mode" role="tablist">
           <button className={vm.section === 'games' ? 'active' : ''} onClick={vm.showGames} role="tab"><Gamepad2 size={17} /> Games</button>
-          <button className={vm.section === 'rankings' ? 'active' : ''} onClick={vm.showRankings} role="tab"><Trophy size={17} /> Rankings</button>
+          <button className={vm.section === 'history' ? 'active' : ''} onClick={vm.showHistory} role="tab"><HistoryIcon size={17} /> History</button>
         </div>
       </header>
 
@@ -44,23 +51,44 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
       ) : (
         <section className="leaderboard-view">
           <div className="leaderboard-tabs" role="tablist">
-            <button className={vm.rankingGame === 'graph_challenge' ? 'active' : ''} onClick={() => vm.setRankingGame('graph_challenge')} role="tab">Graph Challenge</button>
-            <button className={vm.rankingGame === 'memory_match' ? 'active' : ''} onClick={() => vm.setRankingGame('memory_match')} role="tab">Memory Match</button>
+            <button className={vm.historyGame === 'graph_challenge' ? 'active' : ''} onClick={() => vm.setHistoryGame('graph_challenge')} role="tab">Graph Challenge</button>
+            <button className={vm.historyGame === 'memory_match' ? 'active' : ''} onClick={() => vm.setHistoryGame('memory_match')} role="tab">Memory Match</button>
           </div>
           <div className="leaderboard-content">
-            <div className="leaderboard-title"><Medal size={25} /><div><h2>{vm.rankingGame === 'graph_challenge' ? 'Graph Challenge' : 'Memory Match'} ranking</h2><p>{vm.rankingGame === 'graph_challenge' ? 'Highest three-round score' : 'Most pairs found in one match'}</p></div></div>
-            {vm.isLoadingRankings && <div className="leaderboard-empty">Loading ranking...</div>}
+            <div className="leaderboard-title"><Medal size={25} /><div><h2>{vm.historyGame === 'graph_challenge' ? 'Graph Challenge ranking' : 'Memory Match history'}</h2><p>{vm.historyGame === 'graph_challenge' ? 'Highest three-round scores' : 'Latest matches against Agents'}</p></div></div>
+            {vm.isLoadingHistory && <div className="leaderboard-empty">Loading history...</div>}
             {vm.error && <div className="leaderboard-empty error">{vm.error}</div>}
-            {!vm.isLoadingRankings && !vm.error && vm.entries.length === 0 && <div className="leaderboard-empty"><Trophy size={34} /><strong>No scores yet</strong><span>Complete a game to take the first place.</span></div>}
-            {vm.entries.length > 0 && (
-              <div className="leaderboard-table" role="table" aria-label="Game ranking">
-                <div className="leaderboard-row heading" role="row"><span>Rank</span><span>Player</span><span>Result</span><span>Score</span></div>
-                {vm.entries.map(entry => <div key={`${entry.rank}-${entry.played_at}`} className={`leaderboard-row rank-${entry.rank}`} role="row"><b>{entry.rank}</b><strong>{entry.player_name}</strong><span>{entry.detail}</span><em>{entry.score}</em></div>)}
-              </div>
-            )}
+            {!vm.isLoadingHistory && !vm.error && vm.entries.length === 0 && <div className="leaderboard-empty"><Trophy size={34} /><strong>No history yet</strong><span>Complete a game to create your first record.</span></div>}
+            {vm.entries.length > 0 && vm.historyGame === 'graph_challenge' && <RankingTable entries={vm.entries} />}
+            {vm.entries.length > 0 && vm.historyGame === 'memory_match' && <MatchHistoryTable entries={vm.entries} />}
           </div>
         </section>
       )}
     </main>
+  )
+}
+
+function RankingTable({ entries }: { entries: ReturnType<typeof useGameHubViewModel>['entries'] }) {
+  return (
+    <div className="leaderboard-table" role="table" aria-label="Graph Challenge ranking">
+      <div className="leaderboard-row heading" role="row"><span>Rank</span><span>Player</span><span>Result</span><span>Score</span></div>
+      {entries.map(entry => <div key={`${entry.rank}-${entry.played_at}`} className={`leaderboard-row rank-${entry.rank}`} role="row"><b>{entry.rank}</b><strong>{entry.player_name}</strong><span>{entry.detail}</span><em>{entry.score}</em></div>)}
+    </div>
+  )
+}
+
+function MatchHistoryTable({ entries }: { entries: ReturnType<typeof useGameHubViewModel>['entries'] }) {
+  return (
+    <div className="leaderboard-table match-history-table" role="table" aria-label="Memory Match history">
+      <div className="leaderboard-row heading" role="row"><span>Played</span><span>Player</span><span>Match</span><span>Pairs</span></div>
+      {entries.map(entry => (
+        <div key={`${entry.rank}-${entry.played_at}`} className="leaderboard-row" role="row">
+          <time dateTime={entry.played_at}>{historyDateFormatter.format(new Date(entry.played_at))}</time>
+          <strong>{entry.player_name}</strong>
+          <span>{entry.detail}</span>
+          <em>{entry.score}</em>
+        </div>
+      ))}
+    </div>
   )
 }
