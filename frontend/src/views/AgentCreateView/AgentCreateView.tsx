@@ -55,7 +55,7 @@ export default function AgentCreateView({ vm }: AgentCreateViewProps) {
           <ArrowLeft size={19} />
         </button>
         <div>
-          <span>New conversation Agent</span>
+          <span>New friend</span>
           <h1>Design a friend</h1>
         </div>
       </header>
@@ -113,7 +113,7 @@ export default function AgentCreateView({ vm }: AgentCreateViewProps) {
           <button type="button" className="secondary" onClick={vm.cancel} disabled={vm.isSubmitting}>Cancel</button>
           <button type="submit" className="primary" disabled={!vm.canSubmit || vm.isSubmitting}>
             <Sparkles size={17} />
-            {vm.isSubmitting ? 'Designing...' : 'Create Agent'}
+            {vm.isSubmitting ? 'Designing...' : 'Create friend'}
           </button>
         </footer>
       </form>

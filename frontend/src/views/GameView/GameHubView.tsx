@@ -25,7 +25,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
     <main className="game-hub">
       <header className="game-hub-header">
         <button className="icon-button" onClick={onExit} aria-label="Back to study hub" title="Back to study hub"><ArrowLeft /></button>
-        <div><span className="game-eyebrow">AI HomeSchooling</span><h1>Game room</h1></div>
+        <div><span className="game-eyebrow">AI HomeSchooling</span><h1>Games</h1></div>
         <div className="game-hub-mode" role="tablist">
           <button className={vm.section === 'games' ? 'active' : ''} onClick={vm.showGames} role="tab"><Gamepad2 size={17} /> Games</button>
           <button className={vm.section === 'history' ? 'active' : ''} onClick={vm.showHistory} role="tab"><HistoryIcon size={17} /> History</button>
@@ -34,7 +34,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
 
       {vm.section === 'games' ? (
         <section className="game-catalog">
-          <div className="game-catalog-heading"><h2>Choose a game</h2><p>Practice on your own or challenge an Agent.</p></div>
+          <div className="game-catalog-heading"><h2>Choose a game</h2><p>Practice on your own or play with a friend.</p></div>
           <div className="game-catalog-list">
             <button className="game-catalog-item graph" onClick={vm.openGraph}>
               <span className="game-catalog-icon"><FunctionSquare size={32} /></span>
@@ -43,7 +43,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
             </button>
             <button className="game-catalog-item memory" onClick={vm.openMemory}>
               <span className="game-catalog-icon"><Brain size={32} /></span>
-              <span><small>Agent duel</small><strong>Memory Match</strong><p>Memorize 36 cards, find number pairs, and earn extra turns.</p><em>15s preview · 15s turns · Quick chat</em></span>
+              <span><small>Play with a friend</small><strong>Memory Match</strong><p>Memorize 36 cards, find number pairs, and earn extra turns.</p><em>15s preview · 15s turns · Quick chat</em></span>
               <ChevronRight />
             </button>
           </div>
@@ -55,7 +55,7 @@ export default function GameHubView({ agents, onExit }: GameHubViewProps) {
             <button className={vm.historyGame === 'memory_match' ? 'active' : ''} onClick={() => vm.setHistoryGame('memory_match')} role="tab">Memory Match</button>
           </div>
           <div className="leaderboard-content">
-            <div className="leaderboard-title"><Medal size={25} /><div><h2>{vm.historyGame === 'graph_challenge' ? 'Graph Challenge ranking' : 'Memory Match history'}</h2><p>{vm.historyGame === 'graph_challenge' ? 'Highest three-round scores' : 'Latest matches against Agents'}</p></div></div>
+            <div className="leaderboard-title"><Medal size={25} /><div><h2>{vm.historyGame === 'graph_challenge' ? 'Graph Challenge ranking' : 'Memory Match history'}</h2><p>{vm.historyGame === 'graph_challenge' ? 'Highest three-round scores' : 'Latest matches with friends'}</p></div></div>
             {vm.isLoadingHistory && <div className="leaderboard-empty">Loading history...</div>}
             {vm.error && <div className="leaderboard-empty error">{vm.error}</div>}
             {!vm.isLoadingHistory && !vm.error && vm.entries.length === 0 && <div className="leaderboard-empty"><Trophy size={34} /><strong>No history yet</strong><span>Complete a game to create your first record.</span></div>}
