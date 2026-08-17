@@ -17,7 +17,7 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
       <main className="memory-game lobby">
         <header className="game-hub-header">
           <button className="icon-button" onClick={onExit} aria-label="Back" title="Back"><ArrowLeft /></button>
-          <div><span className="game-eyebrow">Agent duel</span><h1>Memory Match</h1></div>
+          <div><span className="game-eyebrow">Play with a friend</span><h1>Memory Match</h1></div>
         </header>
         <section className="memory-lobby-content">
           <div className="memory-card-preview" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <span key={index}>{(index % 6) + 1}</span>)}</div>
@@ -48,7 +48,7 @@ export default function MemoryMatchView({ agents, onExit }: MemoryMatchViewProps
             <section className="challenge-result-dialog" role="dialog" aria-modal="true" aria-labelledby="challenge-result-title" onClick={event => event.stopPropagation()}>
               {vm.challengeDecision === 'accepted' ? <CheckCircle2 size={38} /> : <XCircle size={38} />}
               <h2 id="challenge-result-title">{vm.selectedAgent?.name} {vm.challengeDecision === 'accepted' ? 'accepted your challenge.' : 'declined your challenge.'}</h2>
-              <p>{vm.challengeDecision === 'accepted' ? 'Entering the game...' : 'This Agent is currently offline.'}</p>
+              <p>{vm.challengeDecision === 'accepted' ? 'Entering the game...' : 'Your friend is currently offline.'}</p>
               {vm.challengeDecision === 'accepted' && <LoaderCircle className="challenge-result-spinner" size={20} />}
               {vm.challengeDecision === 'rejected' && <small>Click outside to close</small>}
             </section>

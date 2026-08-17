@@ -1,4 +1,4 @@
-import { ArrowLeft, Bot, RotateCw } from 'lucide-react'
+import { ArrowLeft, Bot, RotateCw, Send } from 'lucide-react'
 import { useAgentChatViewModel, type AgentExpression } from './useAgentChatViewModel'
 
 const EXPRESSION_SRC: Record<AgentExpression, string> = {
@@ -8,8 +8,6 @@ const EXPRESSION_SRC: Record<AgentExpression, string> = {
   annoyed: '/assets/jiho/jiho_annoyed.png',
   sulk: '/assets/jiho/jiho_sulk.png',
 }
-
-const EXPRESSIONS = Object.keys(EXPRESSION_SRC) as AgentExpression[]
 
 interface AgentChatViewProps {
   agentId: string
@@ -114,44 +112,21 @@ export default function AgentChatView({ agentId, onExit }: AgentChatViewProps) {
         </div>
       )}
 
-      <aside className={`friend-stage stage-${expression}`}>
-        <div className="friend-stage-inner">
-          {hasAvatar ? (
-            EXPRESSIONS.map(mood => (
-              <img
-                key={mood}
-                src={agent.avatarByMood?.[mood] ?? EXPRESSION_SRC[mood]}
-                alt={`${agent.name} ${mood}`}
-                className={`friend-portrait ${expression === mood ? 'active' : ''}`}
-                draggable={false}
-              />
-            ))
-          ) : (
-            <div className="friend-portrait-placeholder" aria-label={`${agent.name} avatar`}>
-              <Bot size={52} />
-              <strong>{agent.name.slice(0, 2).toUpperCase()}</strong>
-            </div>
-          )}
-        </div>
-
-        {showDebug && (
-          <div className="friend-affinity-num">
-            affinity {affinity}/100{cooldownArmed ? ' | next cooldown armed' : ''}{doubleTextArmed ? ' | next double-text armed' : ''}
-          </div>
-        )}
-      </aside>
-
       <section className="friend-chat">
         <header className="friend-chat-header">
           <button className="friend-back" onClick={onExit} aria-label="Back to home">
             <ArrowLeft size={18} />
           </button>
+          <span className="friend-header-avatar">
+            {hasAvatar ? (
+              <img src={agent.avatarByMood?.[expression] ?? EXPRESSION_SRC[expression]} alt="" />
+            ) : (
+              <Bot size={19} />
+            )}
+            <i className={isOnline ? 'online' : 'offline'} />
+          </span>
           <div className="friend-chat-title">
             <span className="friend-name">{agent.name}</span>
-            <span className={`friend-status ${isOnline ? 'online' : 'offline'}`}>
-              <span className="friend-status-dot" />
-              {isOnline ? 'online' : 'offline'}
-            </span>
           </div>
           {canDebug && (
             <button
@@ -198,7 +173,11 @@ export default function AgentChatView({ agentId, onExit }: AgentChatViewProps) {
               </button>
             </>
           )}
-          <button className="friend-go-class" onClick={onExit}>Go to class</button>
+          {showDebug && (
+            <span className="friend-affinity-num">
+              affinity {affinity}/100{cooldownArmed ? ' | next cooldown armed' : ''}{doubleTextArmed ? ' | next double-text armed' : ''}
+            </span>
+          )}
         </header>
 
         <div className="friend-chat-window" ref={bindScrollContainer}>
@@ -233,7 +212,8 @@ export default function AgentChatView({ agentId, onExit }: AgentChatViewProps) {
             disabled={isStreaming}
           />
           <button onClick={() => void send()} disabled={isStreaming || !input.trim()}>
-            Send
+            <Send size={18} />
+            <span>Send</span>
           </button>
         </div>
       </section>
